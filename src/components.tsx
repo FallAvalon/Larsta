@@ -1,0 +1,47 @@
+import { t, uiLocale } from './i18n';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { X, Upload, ImagePlus, Save, Sparkles, LoaderCircle } from 'lucide-react';
+import type { Card, Character } from '../shared/types';
+import { api, json } from './api';
+import { Presence } from './motion';
+
+let modalLocks=0,previousOverflow='',previousPadding='';
+export function Modal({title,children,onClose,wide=false,className=''}:{title:string;children:ReactNode;onClose:()=>void;wide?:boolean;className?:string}) {
+  const ref=useRef<HTMLDivElement>(null),closeRef=useRef(onClose);closeRef.current=onClose;
+  useEffect(()=>{
+    if(modalLocks++===0){previousOverflow=document.body.style.overflow;previousPadding=document.body.style.paddingRight;const gutter=innerWidth-document.documentElement.clientWidth;if(gutter)document.body.style.paddingRight=`${parseFloat(getComputedStyle(document.body).paddingRight)+gutter}px`;document.body.style.overflow='hidden';}
+    return()=>{if(--modalLocks===0){document.body.style.overflow=previousOverflow;document.body.style.paddingRight=previousPadding;}};
+  },[]);
+  useEffect(()=>{
+    const previous=document.activeElement as HTMLElement;ref.current?.focus();
+    const handle=(e:KeyboardEvent)=>{if(ref.current?.closest('[inert]'))return;if(e.key==='Escape')closeRef.current();if(e.key==='Tab') {const els=Array.from(ref.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href]')||[]).filter(el=>el.getClientRects().length>0);if(!els?.length)return;const first=els[0],last=els[els.length-1];if(e.shiftKey && (document.activeElement===first||document.activeElement===ref.current)) {e.preventDefault();last.focus();} else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}};
+    document.addEventListener('keydown',handle);return()=>{document.removeEventListener('keydown',handle);if(document.activeElement===document.body||ref.current?.contains(document.activeElement))previous?.focus({preventScroll:true});};
+  },[]);
+  return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}><div className={`modal ${wide?'wide':''} ${className}`} role="dialog" aria-modal="true" aria-label={title} ref={ref} tabIndex={-1}><header><h2>{title}</h2><button className="icon-button" aria-label={t("Закрыть")} onClick={onClose}><X size={21}/></button></header>{children}</div></div>;
+}
+export function Avatar({character,size='normal'}:{character?:Pick<Character,'avatar'|'card'>;size?:string}) {return <div className={`avatar ${size}`}>{character?.avatar ? <img src={character.avatar} alt=""/> : <span>{character?.card.data.name.slice(0,1).toUpperCase()||'L'}</span>}</div>;}
+export function ErrorBox({text}:{text:string}) {return <Presence present={!!text}>{text&&<div className="error-box" role="alert">{t(text)}</div>}</Presence>;}
+export function Loading(){return <div className="loading"><LoaderCircle className="spin" size={22}/> {t(" Загрузка…")}</div>;}
+export function emptyCard():Card {return {spec:'chara_card_v2',spec_version:'2.0',data:{name:'',description:'',personality:'',scenario:'',first_mes:'',mes_example:'',creator_notes:'',system_prompt:'',post_history_instructions:'',alternate_greetings:[],tags:[],creator:'',character_version:'1.0',extensions:{}}};}
+export function CharacterEditor({character,onClose,onSaved}:{character?:Character;onClose:()=>void;onSaved:(c:Character)=>void}) {
+  const [card,setCard]=useState<Card>(()=>character?structuredClone(character.card):emptyCard());
+  const [summary,setSummary]=useState(character?.summary||''),[tags,setTags]=useState(card.data.tags.join(', '));
+  const [file,setFile]=useState<File|null>(null),[preview,setPreview]=useState(character?.avatar||''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const savedId=useRef(character?.id);
+  useEffect(()=>{if(!file)return;const url=URL.createObjectURL(file);setPreview(url);return()=>URL.revokeObjectURL(url);},[file]);
+  const field=(key:string,value:string)=>setCard(c=>({...c,data:{...c.data,[key]:value}}));
+  async function save(e:React.FormEvent) {e.preventDefault();setBusy(true);setError('');try {
+    const value={...card,data:{...card.data,tags:[...new Set(tags.split(',').map(s=>s.trim()).filter(Boolean))]}};
+    let c=await api<Character>(savedId.current?`/characters/${savedId.current}`:'/characters',{method:savedId.current?'PUT':'POST',body:json({card:value,summary})});savedId.current=c.id;
+    if(file){const data=new FormData();data.append('avatar',file);try {c=await api<Character>(`/characters/${c.id}/avatar`,{method:'POST',body:data});} catch(e){onSaved(c);throw new Error(t("Карточка сохранена, но аватар не загружен. {0}",{0:(e as Error).message}));}}
+    onSaved(c);onClose();
+  }catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  return <Modal title={character?t("Редактировать персонажа"):t("Новый персонаж")} onClose={()=>{if(!busy)onClose();}} wide className="character-editor"><form onSubmit={save} className="editor-form"><div className="modal-scroll"><div className="editor-intro"><label className="avatar-upload">{preview?<img src={preview} alt={t("Предпросмотр аватара")}/>:<><ImagePlus size={28}/><span>{t("Аватар")}</span></>}<input aria-label={t("Загрузить аватар")} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>{const f=e.target.files?.[0];if(f&&f.size>8*1024*1024){setError(t("Максимальный размер аватара — 8 МБ."));return;}setFile(f||null);}}/></label><div className="grow"><label>{t("Имя")}<input required maxLength={120} value={card.data.name} onChange={e=>field('name',e.target.value)} placeholder={t("Как зовут вашего персонажа?")}/></label><label>{t("Описание для карточки")}<textarea rows={2} maxLength={600} value={summary} onChange={e=>setSummary(e.target.value)} placeholder={t("Короткое описание для библиотеки")}/></label></div></div>
+    {([['description',t("Полное описание"),t("Внешность, биография, важные детали")],['personality',t("Характер"),t("Привычки, ценности, манера речи")],['scenario',t("Сценарий"),t("Где и как начинается история?")],['first_mes',t("Первое сообщение"),t("Персонаж первым начнёт разговор. Можно использовать {{user}} и {{char}}.")],['mes_example',t("Примеры диалогов"),t("<START>\n{{user}}: Привет.\n{{char}}: Я ждал тебя.")]] as const).map(([key,label,placeholder])=><label key={key}>{label}<textarea rows={key==='first_mes'?4:3} maxLength={100000} value={String(card.data[key])} onChange={e=>field(key,e.target.value)} placeholder={placeholder}/></label>)}
+    <label>{t("Теги ")}<span className="muted">{t("через запятую")}</span><input value={tags} onChange={e=>setTags(e.target.value)} placeholder={t("фэнтези, приключения, драма")}/></label><details><summary>{t("Дополнительные поля Character Card V2")}</summary><label>{t("Заметки автора")}<textarea value={card.data.creator_notes} onChange={e=>field('creator_notes',e.target.value)}/></label><label>{t("Инструкции персонажа")}<textarea value={card.data.system_prompt} onChange={e=>field('system_prompt',e.target.value)}/></label><label>{t("Инструкции после истории")}<textarea value={card.data.post_history_instructions} onChange={e=>field('post_history_instructions',e.target.value)}/></label><p className="muted">{t("Дополняют общий промпт. Неизвестные поля импортированной карточки сохраняются при экспорте. Lorebook и альтернативные приветствия пока не используются.")}</p></details><ErrorBox text={error}/></div><footer><button type="button" className="button" disabled={busy} onClick={onClose}>{t("Отмена")}</button><button className="button primary" disabled={busy}>{busy?<LoaderCircle size={17} className="spin"/>:<Save size={17}/>} {t(" Сохранить персонажа")}</button></footer></form></Modal>;
+}
+export function ImportModal({onClose,onImported}:{onClose:()=>void;onImported:(c:Character)=>void}) {
+  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[file,setFile]=useState<File|null>(null);
+  async function load(){if(!file)return;setBusy(true);setError('');try{if(file.size>2*1024*1024)throw new Error(t("JSON должен быть меньше 2 МБ."));let card;try{card=JSON.parse(await file.text());}catch{throw new Error(t("Файл содержит некорректный JSON. Проверьте запятые, кавычки и скобки."));}const c=await api<Character>('/characters/import',{method:'POST',body:json(card)});onImported(c);onClose();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  return <Modal title={t("Импорт персонажа")} onClose={onClose}><div className="modal-scroll"><p className="muted">{t("Загрузите карточку в формате Character Card V2. Персонаж появится в библиотеке как новая запись.")}</p><label className="dropzone"><Upload size={32}/><strong>{file?.name||t("Выберите JSON-карточку")}</strong><span>{t("Character Card V2 · до 2 МБ")}</span><input type="file" accept=".json,application/json" onChange={e=>setFile(e.target.files?.[0]||null)}/></label><ErrorBox text={error}/><div className="info-note"><Sparkles size={18}/><span>{t("Шаблон для создания карточки с помощью ИИ лежит в ")}<code>examples/character-v2.json</code>.</span></div></div><footer><button className="button" onClick={onClose}>{t("Отмена")}</button><button className="button primary" disabled={!file||busy} onClick={()=>void load()}>{busy?t("Импорт…"):t("Импортировать")}</button></footer></Modal>;
+}

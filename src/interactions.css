@@ -1,0 +1,77 @@
+/* Shared button feel. Individual scale/translate leave layout and popover anchors intact. */
+:root {
+  --control-ease: cubic-bezier(.2,.7,.25,1);
+  --control-time: 180ms;
+}
+:is(.button,.icon-button,.send-button,.page-add,.card-bookmark,.card-name,
+  .tabs button,.tag-filters button,.sidebar nav>button,.bottom-nav>button,
+  .settings-index>button,.segmented-control button,.composer-model,.message-tools button,
+  .chat-menu-items button,.message-action-list>button,.persona-menu [role=menuitem],.model-option) {
+  scale: 1;
+  translate: 0;
+  transition: background-color var(--control-time) ease, color var(--control-time) ease,
+    border-color var(--control-time) ease, box-shadow var(--control-time) ease,
+    opacity var(--control-time) ease, scale 220ms var(--control-ease), translate 220ms var(--control-ease);
+}
+:is(.button,.icon-button,.send-button,.page-add,.card-bookmark,.tabs button,.tag-filters button,
+  .sidebar nav>button,.bottom-nav>button,.settings-index>button,.segmented-control button,
+  .composer-model,.message-tools button):active:not(:disabled) {
+  transform: none;
+  scale: .96;
+  translate: 0;
+  transition-duration: 70ms;
+}
+:is(.conversation-row,.card-cover,.model-option,.branch-list>button):active:not(:disabled) {
+  scale: .994;
+  transition: scale 80ms ease-out;
+}
+:is(.button,.icon-button,.send-button,.page-add,.card-bookmark,.sidebar nav>button,
+  .bottom-nav>button,.settings-index>button,.segmented-control button,.tabs button)>svg {
+  transition: translate 220ms var(--control-ease), rotate 260ms var(--control-ease),
+    scale 240ms var(--control-ease), fill 180ms ease, color 180ms ease;
+}
+.card-bookmark.is-favorite>svg { scale: 1.08; }
+.composer-model>svg:last-child { transition: rotate 220ms var(--control-ease); }
+.composer-model[aria-expanded=true]>svg:last-child { rotate: 180deg; }
+.bottom-nav>button:after {
+  content: ''; position: absolute; bottom: 3px; width: 24px; height: 2px;
+  border-radius: 4px; background: #eceeee; scale: .25 1; opacity: 0;
+  transition: scale 240ms var(--control-ease), opacity 180ms ease;
+}
+.bottom-nav>button.active:after { scale: 1; opacity: 1; }
+:is(.sidebar nav,.bottom-nav)>button.active>svg { scale: 1.06; }
+.wallpaper-switch { cursor: pointer; }
+.wallpaper-switch input[type=checkbox] {
+  appearance: none; position: relative; display: inline-block; flex-shrink: 0;
+  width: 42px; height: 26px; min-height: 26px; margin: 0; padding: 0;
+  border: 1px solid #565b64; border-radius: 20px; background: #292d33; cursor: pointer;
+  transition: background-color 200ms ease, border-color 200ms ease, box-shadow 180ms ease;
+}
+.wallpaper-switch input[type=checkbox]:before {
+  content: ''; position: absolute; top: 4px; left: 4px; width: 16px; height: 16px;
+  border-radius: 50%; background: #c4c9d1;
+  transition: translate 240ms var(--control-ease), background-color 180ms ease;
+}
+.wallpaper-switch input[type=checkbox]:checked { background: #eaedee; border-color: #eaedee; }
+.wallpaper-switch input[type=checkbox]:checked:before { translate: 16px 0; background: #272b31; }
+.wallpaper-switch input[type=checkbox]:focus-visible { outline: 2px solid #e4e5e5; outline-offset: 4px; box-shadow: none; }
+.client-profile-setting { margin-bottom: 32px; }
+@media (hover:hover) and (pointer:fine) {
+  :is(.button,.page-add,.send-button):hover:not(:disabled) { translate: 0 -1px; }
+  :is(.icon-button,.card-bookmark):hover:not(:disabled) { scale: 1.045; }
+  :is(.sidebar nav,.bottom-nav)>button:hover:not(:disabled)>svg { translate: 0 -2px; }
+  .button:hover:not(:disabled)>svg:not(.spin) { translate: 0 -1px; }
+  .send-button:hover:not(:disabled)>svg { translate: 0 -2px; }
+  .chat-settings-button:hover:not(:disabled)>svg { rotate: 24deg; }
+  .rail-logout:hover:not(:disabled)>svg { translate: 2px 0; }
+  .card-bookmark:hover:not(:disabled)>svg { scale: 1.12; }
+  .wallpaper-switch input[type=checkbox]:hover { border-color: #a2a9b4; box-shadow: 0 0 0 3px #ffffff05; }
+}
+/* Keep hover styles from overpowering the press state on a mouse. */
+:is(.button,.page-add,.send-button):active:not(:disabled) { translate: 0; }
+:is(.icon-button,.card-bookmark):active:not(:disabled) { scale: .94; }
+:root[data-motion=off] :is(button,input), :root[data-motion=off] button>svg,
+:root[data-motion=off] button:after { scale: none !important; translate: none !important; rotate: none !important; }
+@media (prefers-reduced-motion:reduce) {
+  :is(button,input), button>svg, button:after { scale: none !important; translate: none !important; rotate: none !important; }
+}
