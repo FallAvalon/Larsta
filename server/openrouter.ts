@@ -7,11 +7,19 @@ export class RouterClient {
   constructor(private fetcher: Fetcher = fetch, private base = 'https://openrouter.ai/api/v1') {}
   async models(force = false): Promise<Model[]> {
     if (!force && this.cache && Date.now()-this.cache.at < 300_000) return this.cache.models;
-    try {
-      const res = await this.fetcher(`${this.base}/models`, {signal:AbortSignal.timeout(20_000)});
-      if (!res.ok) throw new Error();
+    let diagnostic='';
+    for(let attempt=0;attempt<3;attempt++) {
+      let retry=true;
+      try {
+      const res = await this.fetcher(`${this.base}/models`, {signal:AbortSignal.timeout(15_000)});
+      if (!res.ok) {
+        diagnostic=`HTTP_${res.status}`;
+        retry=res.status===429 || res.status>=500;
+        await res.body?.cancel().catch(()=>{});
+        if(!retry)break;
+      } else {
       const json = await res.json() as {data:Model[]};
-      if (!Array.isArray(json.data)) throw new Error();
+      if (!Array.isArray(json?.data)) {diagnostic='INVALID_RESPONSE';break;}
       const models = json.data.filter(m=>m && typeof m.id==='string' && (!Array.isArray(m.architecture?.output_modalities) || m.architecture.output_modalities.includes('text'))).map(m=>({
         id:m.id, name:typeof m.name==='string'?m.name:m.id,
         context_length:positiveNumber(m.context_length)??0,
@@ -20,7 +28,20 @@ export class RouterClient {
         ...(positiveNumber(m.top_provider?.max_completion_tokens)?{top_provider:{max_completion_tokens:positiveNumber(m.top_provider?.max_completion_tokens)}}:{})
       }));
       this.cache = { models, at:Date.now() }; return models;
-    } catch { throw new AppError(502,'Не удалось загрузить каталог OpenRouter. Проверьте интернет или введите ID модели вручную.'); }
+      }
+      } catch(error) {
+        if(error instanceof SyntaxError) {diagnostic='INVALID_RESPONSE';retry=false;}
+        else if(error instanceof Error && error.name==='TimeoutError') diagnostic='TIMEOUT';
+        else {
+          const cause=error && typeof error==='object' ? (error as {code?:unknown;cause?:{code?:unknown}}) : undefined;
+          const code=cause?.code??cause?.cause?.code;
+          diagnostic=typeof code==='string' && /^(?:E[A-Z0-9_]{1,40}|UND_ERR_[A-Z0-9_]{1,40}|CERT_[A-Z0-9_]{1,40}|DEPTH_ZERO_SELF_SIGNED_CERT|UNABLE_TO_[A-Z0-9_]{1,40})$/.test(code)?code:'NETWORK_ERROR';
+        }
+      }
+      if(!retry || attempt===2)break;
+      await new Promise(resolve=>setTimeout(resolve,300*(attempt+1)));
+    }
+    throw new AppError(502,`Не удалось загрузить каталог OpenRouter. Проверьте интернет или введите ID модели вручную.${diagnostic?` Код сбоя: ${diagnostic}.`:''}`);
   }
   async stream(key: string, body: Record<string, unknown>, signal: AbortSignal, delta: (value:string)=>void, reasoning: (value:string)=>void = ()=>{}, clientProfile: Settings['clientProfile'] = 'larsta') {
     let res: Response;

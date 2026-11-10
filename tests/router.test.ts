@@ -4,6 +4,26 @@ import { RouterClient, routerError } from '../server/openrouter.js';
 
 const encoder=new TextEncoder();
 const frame=(value:unknown)=>`data: ${typeof value==='string'?value:JSON.stringify(value)}\n\n`;
+test('catalog retries temporary connection errors and server failures',async()=>{
+  let calls=0;
+  const router=new RouterClient(async()=>{
+    calls++;
+    if(calls===1)throw Object.assign(new TypeError('private network details'),{cause:{code:'ECONNRESET'}});
+    if(calls===2)return new Response(null,{status:503});
+    return Response.json({data:[{id:'fixture/story',pricing:{prompt:'0',completion:'0'}}]});
+  });
+  const models=await router.models();assert.equal(calls,3);assert.equal(models[0].id,'fixture/story');
+  await router.models();assert.equal(calls,3,'successful result should be cached');
+});
+
+test('catalog reports a safe diagnostic and does not retry permanent errors',async()=>{
+  let calls=0;
+  const denied=new RouterClient(async()=>{calls++;return new Response('private provider details',{status:403});});
+  await assert.rejects(()=>denied.models(true),error=>error instanceof Error&&error.message.includes('HTTP_403')&&!error.message.includes('private provider details'));
+  assert.equal(calls,1);
+  const broken=new RouterClient(async()=>{throw Object.assign(new TypeError('secret raw details'),{cause:{code:'ECONNRESET'}});});
+  await assert.rejects(()=>broken.models(true),error=>error instanceof Error&&error.message.includes('ECONNRESET')&&!error.message.includes('secret raw details'));
+});
 test('terminal SSE markers finish and release a connection even when the provider leaves it open',async()=>{
   for(const terminal of ['[DONE]',{choices:[{delta:{},finish_reason:'stop'}]}]) {
     let timer:ReturnType<typeof setTimeout>,cancelled=false;
