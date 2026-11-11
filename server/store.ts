@@ -2,7 +2,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { Card, Character, Chat, Message, MessageVariant, Settings, Persona, PersonaData, ChatPersona } from '../shared/types.js';
+import type { Card, Character, Chat, Message, MessageVariant, Settings, Persona, PersonaData, ChatPersona, ProviderConfig, ProviderOrigin } from '../shared/types.js';
+import { legacyProvider } from '../shared/providers.js';
 import { AppError, defaults } from './domain.js';
 import { createBackup } from './backups.js';
 
@@ -14,8 +15,8 @@ export class Store {
     const existed=existsSync(path.join(dir,'larsta.sqlite'));
     this.db = new DatabaseSync(path.join(dir, 'larsta.sqlite'));
     const version=Number((this.db.prepare('PRAGMA user_version').get() as Row).user_version);
-    if(version>6){this.db.close();throw new Error('База создана более новой версией Larsta. Обновите приложение.');}
-    if(existed&&version<6&&this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chats'").get()) {
+    if(version>7){this.db.close();throw new Error('База создана более новой версией Larsta. Обновите приложение.');}
+    if(existed&&version<7&&this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chats'").get()) {
       try {createBackup(dir,this.db,'before-migration');} catch(error){this.db.close();throw error;}
     }
     this.db.function('casefold',{deterministic:true},value=>String(value??'').toLocaleLowerCase('ru'));
@@ -58,7 +59,19 @@ export class Store {
         result TEXT NOT NULL, PRIMARY KEY(chat_id,request_id,kind));
         CREATE INDEX IF NOT EXISTS chats_updated ON chats(updated_at);
         CREATE INDEX IF NOT EXISTS chats_character ON chats(character_id);
-        PRAGMA user_version=6;`);
+        CREATE TABLE IF NOT EXISTS providers (id TEXT PRIMARY KEY,value TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1);`);
+      for(const table of ['messages','message_variants']) {
+        const fields=this.db.prepare(`PRAGMA table_info(${table})`).all() as Row[];
+        if(!fields.some(c=>c.name==='provider_id'))this.db.exec(`ALTER TABLE ${table} ADD COLUMN provider_id TEXT; ALTER TABLE ${table} ADD COLUMN provider_name TEXT;`);
+      }
+      if(version<7) {
+        const settings=this.settings();
+        this.db.prepare('INSERT OR IGNORE INTO providers VALUES(?,?,1)').run('openrouter',JSON.stringify({...legacyProvider,lastModel:settings.mainModel}));
+        this.saveSettings({...settings,providerId:settings.providerId||'openrouter'});
+        this.db.exec("UPDATE chats SET generation=json_set(generation,'$.providerId','openrouter') WHERE json_extract(generation,'$.mainModel') IS NOT NULL AND json_extract(generation,'$.providerId') IS NULL");
+        for(const table of ['messages','message_variants'])this.db.exec(`UPDATE ${table} SET provider_id='openrouter',provider_name='OpenRouter' WHERE model IS NOT NULL AND provider_id IS NULL`);
+      }
+      this.db.exec('PRAGMA user_version=7');
     });
     this.db.prepare("UPDATE messages SET status='stopped' WHERE status='streaming'").run();
     this.db.prepare("UPDATE message_variants SET status='stopped' WHERE status='streaming'").run();
@@ -68,6 +81,10 @@ export class Store {
   transaction<T>(fn: () => T): T { this.db.exec('BEGIN IMMEDIATE'); try { const result = fn(); this.db.exec('COMMIT'); return result; } catch (e) { this.db.exec('ROLLBACK'); throw e; } }
   settings(): Omit<Settings, 'hasApiKey'> { const row = this.db.prepare('SELECT value FROM settings WHERE id=1').get() as Row | undefined; return { ...defaults, ...(row ? JSON.parse(row.value) : {}) }; }
   saveSettings(value: Omit<Settings, 'hasApiKey'>) { this.db.prepare('INSERT INTO settings VALUES(1, ?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(JSON.stringify(value)); }
+  providers(): ProviderConfig[] {return (this.db.prepare('SELECT * FROM providers ORDER BY rowid').all() as Row[]).map(row=>({...JSON.parse(row.value),id:row.id,revision:row.revision}));}
+  provider(id:string):ProviderConfig {const value=this.providers().find(p=>p.id===id);if(!value)throw new AppError(404,'Провайдер не найден. Выберите подключение в настройках.','PROVIDER_NOT_FOUND');return value;}
+  saveProvider(value:ProviderConfig) {this.db.prepare('INSERT INTO providers VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,revision=excluded.revision').run(value.id,JSON.stringify(value),value.revision);return this.provider(value.id);}
+  providerChatCount(id:string) {return Number((this.db.prepare("SELECT count(*) AS n FROM chats WHERE json_extract(generation,'$.providerId')=?").get(id) as Row).n);}
   personas(): Persona[] { return (this.db.prepare('SELECT * FROM personas ORDER BY is_default DESC,updated_at DESC,rowid DESC').all() as Row[]).map(row=>({...JSON.parse(row.value),id:row.id,isDefault:!!row.is_default,createdAt:row.created_at,updatedAt:row.updated_at})); }
   persona(id: string): Persona { const p=this.personas().find(p=>p.id===id);if(!p)throw new AppError(404,'Персона не найдена.');return p; }
   savePersona(value: PersonaData, id: string = randomUUID()): Persona {
@@ -155,14 +172,14 @@ export class Store {
   messages(chatId: string, selectedRows?:Row[]): Message[] {
     const rows = selectedRows || this.db.prepare('SELECT * FROM messages WHERE chat_id=? ORDER BY seq').all(chatId) as Row[];
     if(!rows.length)return [];
-    const variants = this.db.prepare(`SELECT v.id,v.message_id,v.status,v.model,v.created_at FROM message_variants v
+    const variants = this.db.prepare(`SELECT v.id,v.message_id,v.status,v.model,v.created_at,v.provider_id,v.provider_name FROM message_variants v
       JOIN messages m ON m.id=v.message_id WHERE m.chat_id=? ${selectedRows?`AND m.id IN (${rows.map(()=>'?').join(',')})`:''} ORDER BY v.seq`).all(chatId,...(selectedRows?rows.map(r=>r.id):[])) as Row[];
     const grouped = new Map<string, MessageVariant[]>();
     for (const row of variants) {
       const list = grouped.get(row.message_id) || [];
-      list.push({ id:row.id, status:row.status, model:row.model, createdAt:row.created_at }); grouped.set(row.message_id,list);
+      list.push({ id:row.id, status:row.status, model:row.model, createdAt:row.created_at,...origin(row) }); grouped.set(row.message_id,list);
     }
-    return rows.map(r=>({ id:r.id, chatId:r.chat_id, role:r.role, content:r.content, ...(r.role==='assistant'&&r.reasoning?{reasoning:r.reasoning}:{}), status:r.status, model:r.model, createdAt:r.created_at,
+    return rows.map(r=>({ id:r.id, chatId:r.chat_id, role:r.role, content:r.content, ...(r.role==='assistant'&&r.reasoning?{reasoning:r.reasoning}:{}), status:r.status, model:r.model, createdAt:r.created_at,...origin(r),
       ...(r.role==='assistant'?{selectedVariantId:r.selected_variant_id || null, variants:grouped.get(r.id) || []}:{}) }));
   }
   // Call inside the same transaction as the edit/selection so the backup and mutation are atomic.
@@ -176,28 +193,28 @@ export class Store {
       .run(id, source.characterId, `${source.title.slice(0,90)} · ${suffix}`, time, time, JSON.stringify(source.persona || null), JSON.stringify(source.generation || {}), group);
     for (const message of messages.slice(0,index + 1)) {
       const messageId = randomUUID();
-      this.db.prepare('INSERT INTO messages(id,chat_id,role,content,status,model,created_at,reasoning) VALUES(?,?,?,?,?,?,?,?)')
-        .run(messageId,id,message.role,message.content,message.status==='streaming'?'stopped':message.status,message.model,message.createdAt,message.reasoning || '');
+      this.db.prepare('INSERT INTO messages(id,chat_id,role,content,status,model,created_at,reasoning,provider_id,provider_name) VALUES(?,?,?,?,?,?,?,?,?,?)')
+        .run(messageId,id,message.role,message.content,message.status==='streaming'?'stopped':message.status,message.model,message.createdAt,message.reasoning || '',message.providerId??null,message.providerName??null);
       const variants = this.db.prepare('SELECT * FROM message_variants WHERE message_id=? ORDER BY seq').all(message.id) as Row[];
       for (const variant of variants) {
         const variantId = randomUUID();
-        this.db.prepare('INSERT INTO message_variants(id,message_id,content,status,model,created_at,reasoning) VALUES(?,?,?,?,?,?,?)')
-          .run(variantId,messageId,variant.content,variant.status==='streaming'?'stopped':variant.status,variant.model,variant.created_at,variant.reasoning || '');
+        this.db.prepare('INSERT INTO message_variants(id,message_id,content,status,model,created_at,reasoning,provider_id,provider_name) VALUES(?,?,?,?,?,?,?,?,?)')
+          .run(variantId,messageId,variant.content,variant.status==='streaming'?'stopped':variant.status,variant.model,variant.created_at,variant.reasoning || '',variant.provider_id,variant.provider_name);
         if (variant.id === message.selectedVariantId) this.db.prepare('UPDATE messages SET selected_variant_id=? WHERE id=?').run(variantId,messageId);
       }
     }
     return this.chat(id);
   }
-  beginVariant(message: Message, content: string, model: string, variantId: string, reasoning = '') {
+  beginVariant(message: Message, content: string, model: string, variantId: string, reasoning = '', provider:ProviderOrigin={providerId:'openrouter',providerName:'OpenRouter'}) {
     if (!message.selectedVariantId) {
-      this.db.prepare('INSERT INTO message_variants(id,message_id,content,status,model,created_at,reasoning) VALUES(?,?,?,?,?,?,?)')
-        .run(randomUUID(),message.id,message.content,message.status,message.model,message.createdAt,message.reasoning||'');
+      this.db.prepare('INSERT INTO message_variants(id,message_id,content,status,model,created_at,reasoning,provider_id,provider_name) VALUES(?,?,?,?,?,?,?,?,?)')
+        .run(randomUUID(),message.id,message.content,message.status,message.model,message.createdAt,message.reasoning||'',message.providerId??null,message.providerName??null);
     }
     const time = new Date().toISOString();
-    this.db.prepare('INSERT INTO message_variants(id,message_id,content,status,model,created_at,reasoning) VALUES(?,?,?,?,?,?,?)')
-      .run(variantId,message.id,content,'streaming',model,time,reasoning);
-    this.db.prepare("UPDATE messages SET content=?,reasoning=?,status='streaming',model=?,created_at=?,selected_variant_id=? WHERE id=?")
-      .run(content,reasoning,model,time,variantId,message.id);
+    this.db.prepare('INSERT INTO message_variants(id,message_id,content,status,model,created_at,reasoning,provider_id,provider_name) VALUES(?,?,?,?,?,?,?,?,?)')
+      .run(variantId,message.id,content,'streaming',model,time,reasoning,provider.providerId??null,provider.providerName??null);
+    this.db.prepare("UPDATE messages SET content=?,reasoning=?,status='streaming',model=?,created_at=?,selected_variant_id=?,provider_id=?,provider_name=? WHERE id=?")
+      .run(content,reasoning,model,time,variantId,provider.providerId??null,provider.providerName??null,message.id);
   }
   updateMessage(id: string, content: string, status: Message['status'], reasoning?: string) {
     this.transaction(() => {
@@ -213,15 +230,16 @@ export class Store {
   selectVariant(messageId: string, variantId: string) {
     const variant = this.db.prepare('SELECT * FROM message_variants WHERE id=? AND message_id=?').get(variantId,messageId) as Row | undefined;
     if (!variant) throw new AppError(404,'Вариант ответа не найден.');
-    this.db.prepare('UPDATE messages SET content=?,reasoning=?,status=?,model=?,created_at=?,selected_variant_id=? WHERE id=?')
-      .run(variant.content,variant.reasoning||'',variant.status,variant.model,variant.created_at,variant.id,messageId);
+    this.db.prepare('UPDATE messages SET content=?,reasoning=?,status=?,model=?,created_at=?,selected_variant_id=?,provider_id=?,provider_name=? WHERE id=?')
+      .run(variant.content,variant.reasoning||'',variant.status,variant.model,variant.created_at,variant.id,variant.provider_id,variant.provider_name,messageId);
   }
-  addMessage(chatId: string, role: Message['role'], content: string, status: Message['status'] = 'complete', model: string | null = null, id: string = randomUUID()): Message {
+  addMessage(chatId: string, role: Message['role'], content: string, status: Message['status'] = 'complete', model: string | null = null, id: string = randomUUID(), provider:ProviderOrigin=model?{providerId:'openrouter',providerName:'OpenRouter'}:{}): Message {
     const time = new Date().toISOString();
-    this.db.prepare('INSERT INTO messages(id,chat_id,role,content,status,model,created_at) VALUES(?,?,?,?,?,?,?)').run(id,chatId,role,content,status,model,time);
+    this.db.prepare('INSERT INTO messages(id,chat_id,role,content,status,model,created_at,provider_id,provider_name) VALUES(?,?,?,?,?,?,?,?,?)').run(id,chatId,role,content,status,model,time,provider.providerId??null,provider.providerName??null);
     this.touch(chatId);
-    return { id,chatId,role,content,status,model,createdAt:time };
+    return { id,chatId,role,content,status,model,createdAt:time,...provider };
   }
   touch(id: string) { this.db.prepare('UPDATE chats SET updated_at=?,revision=revision+1 WHERE id=?').run(new Date().toISOString(),id); }
   close() { this.db.close(); }
 }
+function origin(row:Row):ProviderOrigin {return row.provider_id?{providerId:row.provider_id,providerName:row.provider_name}:{};}

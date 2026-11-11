@@ -11,6 +11,9 @@ import { Secrets } from './secrets.js';
 import { AppError, parseCard, personaSchema, settingsSchema } from './domain.js';
 import { buildContext, withPersona } from './context.js';
 import { RouterClient } from './openrouter.js';
+import { Providers } from './providers.js';
+import type { Fetcher } from './provider-client.js';
+import { supportsParameter } from '../shared/types.js';
 import { GenerationStreams } from './generations.js';
 import { createBackup, listBackups, verifyBackup } from './backups.js';
 import { translate } from '../shared/translations.js';
@@ -22,8 +25,9 @@ export function addresses(port: number) {
 }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const sessionAge = 30*24*3600*1000;
-export function createApp({ dataDir, router = new RouterClient(), port = 3000 }: {dataDir:string; router?:RouterClient; port?:number}) {
+export function createApp({ dataDir, router, fetcher=fetch, port = 3000 }: {dataDir:string; router?:RouterClient; fetcher?:Fetcher; port?:number}) {
   const store = new Store(dataDir), secrets = new Secrets(dataDir), app = express();
+  const providers=new Providers(store,secrets,fetcher,router);
   const active = new Map<string,AbortController>();
   const streams = new GenerationStreams();
   const pageLimit=(req:express.Request)=>z.coerce.number().int().min(1).max(100).optional().parse(req.query.limit);
@@ -81,16 +85,31 @@ export function createApp({ dataDir, router = new RouterClient(), port = 3000 }:
     res.status(201).json({id,createdAt,reason,bytes:files.reduce((sum,file)=>sum+file.bytes,0)});
   });
   app.post('/api/backups/:id/verify',(req,res)=>{verifyBackup(dataDir,req.params.id);res.json({ok:true});});
+  app.get('/api/providers',(_req,res)=>res.json(providers.list()));
+  app.post('/api/providers',(req,res)=>res.status(201).json(providers.save(req.body)));
+  app.put('/api/providers/:id',(req,res)=>res.json(providers.save(req.body,req.params.id)));
+  app.delete('/api/providers/:id',(req,res)=>{providers.remove(req.params.id,z.coerce.number().int().positive().parse(req.query.revision));res.json({ok:true});});
+  app.post('/api/providers/test',async(req,res)=>{
+    if(providers.busy.size>=6)throw new AppError(429,'Дождитесь завершения текущих проверок и ответов.');
+    const generation=req.body.generation===true,controller=new AbortController(),operation=randomUUID();
+    providers.busy.set(operation,typeof req.body.id==='string'?req.body.id:'draft');
+    if(generation)active.set(operation,controller);
+    res.once('close',()=>controller.abort());
+    try{const result=await providers.probe(req.body,generation,store.settings().clientProfile,controller.signal);if(result.warning)result.warning=translate(result.warning,res.locals.language);if(!res.destroyed)res.json(result);}
+    catch(e){if(e instanceof Error&&e.name==='TimeoutError')throw new AppError(504,'Время ожидания проверки истекло. Проверьте адрес сервера и модель.');throw e;}
+    finally{providers.busy.delete(operation);active.delete(operation);}
+  });
   app.get('/api/settings',(_req,res)=>res.json({...store.settings(),hasApiKey:!!secrets.apiKey}));
   app.put('/api/settings',(req,res)=>{
-    const input = settingsSchema.parse(req.body);
+    const input = settingsSchema.parse({...req.body,providerId:req.body.providerId??store.settings().providerId});
+    const selectedProvider=store.provider(input.providerId);
     const apiKey = z.string().trim().max(1024).optional().parse(req.body.apiKey);
     if(apiKey?.includes('\n') || apiKey?.includes('\r')) throw new AppError(400,'API-ключ должен занимать одну строку.');
     if(apiKey !== undefined && apiKey !== '') secrets.setKey(apiKey);
     if(req.body.clearApiKey === true) { if(process.env.OPENROUTER_API_KEY) throw new AppError(400,'Ключ задан переменной окружения сервера. Удалите её и перезапустите сервер.'); secrets.setKey(''); }
-    store.saveSettings(input); res.json({...input,hasApiKey:!!secrets.apiKey});
+    store.transaction(()=>{store.saveSettings(input);if(selectedProvider.lastModel!==input.mainModel)store.saveProvider({...selectedProvider,lastModel:input.mainModel,revision:selectedProvider.revision+1});});res.json({...input,hasApiKey:!!secrets.apiKey});
   });
-  app.get('/api/models',async(req,res)=>res.json(await router.models(req.query.refresh==='1')));
+  app.get('/api/models',async(req,res)=>res.json(await providers.models(z.string().max(100).default(store.settings().providerId).parse(req.query.providerId),req.query.refresh==='1')));
   const unlocked = (id:string)=>{ if(active.has(id)) throw new AppError(409,'В этом чате идёт генерация. Сначала остановите её.'); };
   const checkRevision = (chat: ReturnType<Store['chat']>, body: Record<string,unknown>) => {
     if (body.expectedRevision !== undefined && z.number().int().parse(body.expectedRevision) !== chat.revision) throw new AppError(409,'Чат изменился на другом устройстве. Обновите переписку.');
@@ -172,7 +191,9 @@ export function createApp({ dataDir, router = new RouterClient(), port = 3000 }:
   app.patch('/api/chats/:id',(req,res)=>{const chat=store.chat(req.params.id);unlocked(chat.id);checkRevision(chat,req.body);store.db.prepare('UPDATE chats SET title=? WHERE id=?').run(z.string().trim().min(1).max(120).parse(req.body.title),chat.id);store.touch(chat.id);res.json(store.chat(chat.id));});
   app.put('/api/chats/:id/generation',(req,res)=>{
     const chat=store.chat(req.params.id);unlocked(chat.id);checkRevision(chat,req.body);
-    const generation=z.object({mainModel:z.string().trim().min(1).max(200).optional(),temperature:z.number().min(0).max(2).optional(),maxTokens:z.number().int().min(64).max(32768).optional()}).strict().parse(req.body.generation);
+    const generation=z.object({providerId:z.string().min(1).max(100).optional(),mainModel:z.string().trim().min(1).max(500).optional(),temperature:z.number().min(0).max(2).optional(),maxTokens:z.number().int().min(64).max(32768).optional()}).strict().parse(req.body.generation);
+    if(generation.mainModel&&!generation.providerId)generation.providerId='openrouter';
+    if(generation.providerId){store.provider(generation.providerId);if(!generation.mainModel)throw new AppError(400,'Выберите модель для этого провайдера.');}
     store.db.prepare('UPDATE chats SET generation=? WHERE id=?').run(JSON.stringify(generation),chat.id);store.touch(chat.id);res.json(store.chat(chat.id));
   });
   app.get('/api/chats/:id/branches',(req,res)=>{
@@ -248,7 +269,7 @@ export function createApp({ dataDir, router = new RouterClient(), port = 3000 }:
   app.get('/api/chats/:id/messages/:messageId/variants',(req,res)=>{
     store.chat(req.params.id);
     if(!store.messages(req.params.id).some(m=>m.id===req.params.messageId))throw new AppError(404,'Сообщение не найдено.');
-    res.json(store.db.prepare('SELECT id,content,reasoning,status,model,created_at AS createdAt FROM message_variants WHERE message_id=? ORDER BY seq').all(req.params.messageId));
+    res.json(store.db.prepare('SELECT id,content,reasoning,status,model,created_at AS createdAt,provider_id AS providerId,provider_name AS providerName FROM message_variants WHERE message_id=? ORDER BY seq').all(req.params.messageId));
   });
   app.post('/api/chats/:id/stop',(req,res)=>{active.get(req.params.id)?.abort('user');res.json({ok:true});});
   app.post('/api/chats/:id/generate',async(req,res)=>{
@@ -265,8 +286,9 @@ export function createApp({ dataDir, router = new RouterClient(), port = 3000 }:
       return;
     }
     unlocked(chat.id);checkRevision(chat,req.body);
-    if(!secrets.apiKey) throw new AppError(400,'Добавьте API-ключ OpenRouter в настройках. Ваша реплика сохранена.');
     const settings = withPersona({...store.settings(),...chat.generation},chat.persona); if(!settings.mainModel) throw new AppError(400,'Выберите основную модель в настройках. Ваша реплика сохранена.');
+    const {provider,key:providerKey,client}=providers.resolve(settings.providerId);
+    const origin={providerId:provider.id,providerName:provider.name};
     const mode=z.enum(['reply','regenerate','continue']).parse(req.body.mode||'reply');
     const wish=z.string().trim().max(1200).default('').parse(req.body.wish);
     if(wish&&mode!=='regenerate')throw new AppError(400,'Пожелание доступно при перегенерации ответа.');
@@ -285,31 +307,32 @@ export function createApp({ dataDir, router = new RouterClient(), port = 3000 }:
     const controller = new AbortController();
     if(key)store.saveOperation(chat.id,key,'generate',fingerprint,{status:'running'});
     active.set(chat.id,controller);streams.begin(chat.id);
+    providers.busy.set(chat.id,provider.id);
     // Allow slow reasoning models up to 15 minutes. OpenRouter can still enforce its own upstream idle timeout.
     const timeout = setTimeout(()=>controller.abort('timeout'),900_000);
     const id = replace?.id || randomUUID(), variantId=randomUUID(); let content = mode==='continue'?last.content:'', reasoning = '', inserted = false, status: 'complete'|'stopped'|'error' = 'complete', lastSave = 0;
     let failure:{httpStatus?:number;error?:string}={};
     const emit = (event:string,value:Record<string,unknown>)=>streams.publish(chat.id,event,value);
     try {
-      let model; try {model = (await router.models()).find(m=>m.id===settings.mainModel);} catch { /* Manual model IDs remain available without the catalogue. */ }
+      const model=client.peekModels().find(m=>m.id===settings.mainModel);
       if(controller.signal.aborted) throw new Error('Aborted');
       const instruction=mode==='continue'?'Continue your last response as the character. Return only new text to append to the existing response, with any necessary leading space or newline. Do not repeat earlier text or decide the user\'s actions. Use the language of the conversation.':wish?`User guidance for this response variant (this attempt only):\n${wish}`:'';
       const context = buildContext(settings,store.character(chat.characterId).card,history,model,{instruction,continuation:mode==='continue'});
       streams.subscribe(chat.id,res,limit);
-      emit('start',{id,model:settings.mainModel,omitted:context.omitted,contextBytes:context.estimatedBytes,contextLimit:context.contextLimit,replaceMessageId:replace?.id || null,content:mode==='continue'?last.content:''});
+      emit('start',{id,model:settings.mainModel,...origin,omitted:context.omitted,contextBytes:context.estimatedBytes,contextLimit:context.contextLimit,replaceMessageId:replace?.id || null,content:mode==='continue'?last.content:''});
       const body: Record<string,unknown> = {model:settings.mainModel,messages:context.messages};
-      if(!model || model.supported_parameters?.includes('max_tokens')) body.max_tokens = context.maxTokens;
-      if(model?.supported_parameters?.includes('temperature')) body.temperature=settings.temperature;
-      if(settings.reasoningEffort!=='auto' && (!model || model.supported_parameters?.includes('reasoning'))) body.reasoning={effort:settings.reasoningEffort};
-      await router.stream(secrets.apiKey,body,controller.signal,delta=>{
+      if(supportsParameter(model,'max_tokens')||model?.supported_parameters.includes('max_completion_tokens')) body[model?.parametersKnown&& !model.supported_parameters.includes('max_tokens')&&model.supported_parameters.includes('max_completion_tokens')?'max_completion_tokens':'max_tokens'] = context.maxTokens;
+      if(supportsParameter(model,'temperature')) body.temperature=settings.temperature;
+      if(settings.reasoningEffort!=='auto' && (supportsParameter(model,'reasoning')||model?.supported_parameters.includes('reasoning_effort'))) body.reasoning={effort:settings.reasoningEffort};
+      await client.stream(providerKey,body,controller.signal,delta=>{
         content += delta;
         if(Buffer.byteLength(content)>2_000_000) {controller.abort('limit');throw new AppError(502,'Ответ превысил допустимый размер. Полученная часть сохранена.');}
         if(!inserted) store.transaction(()=>{
           if(replace) {
             if(allMessages.at(-1)?.id!==replace.id)store.copyChat(chat.id,undefined,'другое продолжение');
-            store.beginVariant(replace,content,settings.mainModel,variantId,reasoning);
+            store.beginVariant(replace,content,settings.mainModel,variantId,reasoning,origin);
             store.db.prepare('DELETE FROM messages WHERE chat_id=? AND seq>(SELECT seq FROM messages WHERE id=?)').run(chat.id,replace.id);
-          } else store.addMessage(chat.id,'assistant',content,'streaming',settings.mainModel,id);
+          } else store.addMessage(chat.id,'assistant',content,'streaming',settings.mainModel,id,origin);
           inserted=true;
         });
         if(Date.now()-lastSave>250) {store.updateMessage(id,content,'streaming',reasoning);lastSave=Date.now();}
@@ -323,15 +346,15 @@ export function createApp({ dataDir, router = new RouterClient(), port = 3000 }:
     } catch(e) {
       status = controller.signal.aborted && ['user','disconnect'].includes(controller.signal.reason) ? 'stopped' : 'error';
       const message = controller.signal.reason==='timeout' ? 'Время ожидания ответа истекло. Полученная часть сохранена.' : e instanceof AppError ? e.message : 'Поток прерван. Полученная часть и ваша реплика сохранены.';
-      if(!res.headersSent) { failure={httpStatus:e instanceof AppError ? e.status : 502,error:message};if(!res.destroyed)res.status(failure.httpStatus!).json({error:message}); }
+      if(!res.headersSent) { failure={httpStatus:e instanceof AppError&&e.status!==401 ? e.status : 502,error:message};if(!res.destroyed)res.status(failure.httpStatus!).json({error:message,...(e instanceof AppError?{code:e.code,upstreamStatus:e.upstreamStatus}:{})}); }
       if(status==='error') emit('error',{message});
     } finally {
       clearTimeout(timeout);
       try {
         // Preserve a new reasoning-only attempt without replacing an existing answer or deleting descendants.
-        if(!inserted && !replace && reasoning){store.addMessage(chat.id,'assistant','',status,settings.mainModel,id);inserted=true;}
+        if(!inserted && !replace && reasoning){store.addMessage(chat.id,'assistant','',status,settings.mainModel,id,origin);inserted=true;}
         if(inserted) {store.updateMessage(id,content,status,reasoning);store.touch(chat.id);}
-      } finally {active.delete(chat.id);}
+      } finally {active.delete(chat.id);providers.busy.delete(chat.id);}
       if(key)store.saveOperation(chat.id,key,'generate',fingerprint,{status,...failure,messageId:inserted?id:null});
       streams.finish(chat.id,{status,messages:store.messages(chat.id),chat:store.chat(chat.id)});
     }
@@ -340,8 +363,8 @@ export function createApp({ dataDir, router = new RouterClient(), port = 3000 }:
   const errors: express.ErrorRequestHandler = (err,_req,res,_next)=>{
     if(res.headersSent) {res.end();return;}
     const message = err instanceof AppError ? err.message : err instanceof ZodError ? `Проверьте поле «${err.issues[0].path.join('.')}»: неверный тип или допустимый диапазон.` : err instanceof multer.MulterError ? 'Не удалось загрузить файл. Допустимо одно изображение до 8 МБ.' : err.type==='entity.too.large' ? 'Файл или запрос слишком большой. Максимум JSON — 2 МБ.' : err instanceof SyntaxError ? 'Некорректный JSON. Проверьте синтаксис файла.' : 'Внутренняя ошибка сервера. Данные уже сохранённых сообщений не потеряны.';
-    res.status(err instanceof AppError ? err.status : err instanceof ZodError || err instanceof SyntaxError || err instanceof multer.MulterError || err.type==='entity.too.large' ? 400 : 500).json({error:message});
+    res.status(err instanceof AppError ? err.status : err instanceof ZodError || err instanceof SyntaxError || err instanceof multer.MulterError || err.type==='entity.too.large' ? 400 : 500).json({error:message,...(err instanceof AppError?{code:err.code,upstreamStatus:err.upstreamStatus}:{})});
   };
   app.use(errors);
-  return {app,store,secrets,active};
+  return {app,store,secrets,active,providers};
 }

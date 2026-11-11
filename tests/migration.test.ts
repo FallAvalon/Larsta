@@ -18,7 +18,7 @@ test('version 1 database migrates additively without changing existing messages 
     store=new Store(dir);const messages=store.messages('chat');
     assert.equal(messages.length,1);assert.equal(messages[0].id,'saved');assert.equal(messages[0].content,'Существующая переписка.');assert.equal(messages[0].selectedVariantId,null);
     assert(store.db.prepare('SELECT 1 FROM sessions WHERE hash=?').get('session-hash'));
-    assert.equal((store.db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version,6);
+    assert.equal((store.db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version,7);
     store.close();store=undefined;
     store=new Store(dir);assert.equal(store.messages('chat')[0].content,'Существующая переписка.');
   }finally{store?.close();rmSync(dir,{recursive:true,force:true});}

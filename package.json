@@ -11,6 +11,7 @@
     "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
     "start": "node dist-server/server/index.js",
     "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/*.test.js",
+    "test:ui": "node scripts/test-ui.mjs",
     "check": "tsc --noEmit",
     "backup": "node dist-server/server/backup-cli.js",
     "public:check": "node scripts/publication.mjs --workspace",
@@ -27,6 +28,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/express": "^5.0.0",
     "@types/multer": "^2.0.0",
     "@types/node": "^22.15.0",

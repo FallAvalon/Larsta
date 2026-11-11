@@ -71,7 +71,7 @@ test('regeneration wishes apply to one request and per-chat settings remain inde
     detail=await f.detail();assert(!detail.messages.some(message=>message.content.includes('Больше диалога')));
     await f.say('Дальше.');await f.generate();assert(!JSON.stringify(f.calls.at(-1).messages).includes('Больше диалога'));
     const other=f.store.createChat(f.character.id);await f.say('Иная история.',other.id);await f.generate('reply',{},other.id);assert.equal(f.calls.at(-1).model,'test/main');assert.equal(f.store.settings().mainModel,'test/main');
-    await f.restart();assert.deepEqual((await f.detail()).chat.generation,settings);
+    await f.restart();assert.deepEqual((await f.detail()).chat.generation,{...settings,providerId:'openrouter'});
     assert.equal((await f.call(`/chats/${f.chat.id}/generation`,'PUT',{generation:{maxTokens:1}})).status,400);
     assert.equal((await f.call(`/chats/${f.chat.id}/generation`,'PUT',{generation:{hasApiKey:true}})).status,400);
     assert.equal((await f.call(`/chats/${f.chat.id}/generation`,'PUT',{generation:{}})).status,200);

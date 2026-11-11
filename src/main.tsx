@@ -6,4 +6,5 @@ import './chat-design.css';
 import './redesign.css';
 import './interactions.css';
 import './surfaces.css';
+import './providers.css';
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

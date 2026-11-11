@@ -45,3 +45,16 @@ test('publication rejects unmarked credentials and binary content',()=>{
     fs.writeFileSync(filename,Buffer.from([65,0,66]));assert(audit(dir).violations.some(item=>item.rule==='unexpected binary content'));
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('publication detects every provider key without a token prefix and private connection metadata',()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'larsta-provider-publication-'));
+  try{
+    const root=path.join(dir,'source'),privateDir=path.join(dir,'private');fs.mkdirSync(root);fs.mkdirSync(privateDir);
+    const db=new DatabaseSync(path.join(privateDir,'larsta.sqlite'));db.exec('CREATE TABLE providers(id TEXT,value TEXT)');
+    const metadata={id:'fixture-private-provider-id',name:'Fixture Private Connection',baseUrl:'https://private.fixture.invalid/custom',lastModel:'fixture-private-model'};
+    db.prepare('INSERT INTO providers VALUES(?,?)').run(metadata.id,JSON.stringify(metadata));db.close();
+    const key='arbitrary-fixture-credential-without-vendor-prefix';fs.writeFileSync(path.join(privateDir,'server-secrets.json'),JSON.stringify({version:2,connectionCode:'87654321',providerKeys:{[metadata.id]:{key,origin:'https://private.fixture.invalid'}}}));
+    for(const value of [key,metadata.id,metadata.name,metadata.baseUrl,metadata.lastModel]){fs.writeFileSync(path.join(root,'README.md'),value);const result=audit(root,{privateDir});assert(result.violations.length>0);assert(!JSON.stringify(result.violations).includes(value));}
+    fs.writeFileSync(path.join(root,'README.md'),'Clean source');assert.deepEqual(audit(root,{privateDir}).violations,[]);
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

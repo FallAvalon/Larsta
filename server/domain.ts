@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Card, Settings } from '../shared/types.js';
 
-export class AppError extends Error { constructor(public status: number, message: string) { super(message); } }
+export class AppError extends Error { constructor(public status: number, message: string, public code?: string, public upstreamStatus?: number) { super(message); } }
 export const personaSchema = z.object({
   name: z.string().trim().min(1).max(120), appearance: z.string().max(6000).default(''),
   personality: z.string().max(6000).default(''), description: z.string().max(20000).default('')
@@ -27,14 +27,15 @@ export function parseCard(input: unknown): Card {
   return result.data;
 }
 export const settingsSchema = z.object({
-  mainModel: z.string().trim().max(200), auxiliaryModel: z.string().trim().max(200),
+  providerId: z.string().min(1).max(100).default('openrouter'),
+  mainModel: z.string().trim().max(500), auxiliaryModel: z.string().trim().max(200),
   clientProfile: z.enum(['larsta','opencode']).default('larsta'),
   temperature: z.number().min(0).max(2), reasoningEffort: z.enum(['auto','none','low','medium','high']).default('auto'), maxTokens: z.number().int().min(64).max(32768),
   contextBudget: z.number().int().min(2048).max(131072), systemPrompt: z.string().max(50000),
   personaName: z.string().trim().max(120), personaDescription: z.string().max(20000)
 });
 export const defaults: Omit<Settings, 'hasApiKey'> = {
-  mainModel: '', auxiliaryModel: '', clientProfile: 'larsta', temperature: 0.85, reasoningEffort: 'auto', maxTokens: 1024, contextBudget: 16384,
+  providerId: 'openrouter', mainModel: '', auxiliaryModel: '', clientProfile: 'larsta', temperature: 0.85, reasoningEffort: 'auto', maxTokens: 1024, contextBudget: 16384,
   personaName: 'You', personaDescription: '',
   systemPrompt: 'Write a collaborative fictional story as {{char}}. Keep the character\'s voice, motives, and knowledge consistent with the supplied card. Follow established events. Let {{user}} control their own choices, thoughts, dialogue, and actions. Use the language the user is speaking. Use *italics* for actions when helpful. Stay in character unless asked otherwise.'
 };

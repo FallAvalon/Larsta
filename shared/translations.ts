@@ -1,3 +1,4 @@
+import { providerEnglish } from './provider-translations.js';
 export type Language='ru'|'en';
 const entries=`
 Чаты|Chats
@@ -428,6 +429,7 @@ PNG, JPEG, WebP или GIF · до 8 МБ|PNG, JPEG, WebP or GIF · up to 8 MB
 чтобы продолжить историю.|to continue your story.
 `.trim().split('\n').map(line=>line.split('|'));
 export const english:Record<string,string>=Object.fromEntries(entries);
+Object.assign(english,providerEnglish);
 Object.assign(english,Object.fromEntries(`
 API-ключ должен занимать одну строку.|The API key must be a single line.
 OpenRouter вернул пустой ответ. Повторите запрос.|OpenRouter returned an empty response. Try again.

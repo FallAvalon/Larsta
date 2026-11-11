@@ -63,11 +63,18 @@ function privateReferences(dataDir){
         if(settings.mainModel)identity(settings.mainModel,'saved model setting');
         if(settings.auxiliaryModel)identity(settings.auxiliaryModel,'saved model setting');
       }
+      if(tables.has('providers'))for(const row of db.prepare('SELECT id,value FROM providers').all()){
+        records++;const provider=JSON.parse(row.value);if(row.id!=='openrouter')identity(row.id,'private provider identifier');
+        identity(provider.lastModel,'saved provider model');
+        if(!['OpenRouter','LM Studio','Ollama','OmniRoute','Polza.ai','OpenAI-compatible'].includes(provider.name))identity(provider.name,'private provider name');
+        const presets=new Set(['https://openrouter.ai/api/v1','http://localhost:1234/v1','http://localhost:11434/v1','http://localhost:20128/v1','https://polza.ai/api/v1']);
+        if(provider.baseUrl&&!presets.has(provider.baseUrl))identity(provider.baseUrl,'private provider address');
+      }
       db.exec('ROLLBACK;');
     }finally{db.close();}
   }
   const secretFile=path.join(dataDir,'server-secrets.json');
-  if(fs.existsSync(secretFile)){const secrets=JSON.parse(fs.readFileSync(secretFile,'utf8'));identity(secrets.apiKey,'private API key');identity(secrets.connectionCode,'private connection code');}
+  if(fs.existsSync(secretFile)){const secrets=JSON.parse(fs.readFileSync(secretFile,'utf8'));identity(secrets.apiKey,'private API key');identity(secrets.connectionCode,'private connection code');for(const value of Object.values(secrets.providerKeys??{}))identity(value?.key,'private provider API key');}
   if(process.env.OPENROUTER_API_KEY)identity(process.env.OPENROUTER_API_KEY,'private environment key');
   return {exact,fragments,records};
 }
@@ -79,7 +86,7 @@ export function audit(root,{privateDir,workspace=false}={}){
     const bytes=fs.readFileSync(path.join(root,file));manifest.push({file,bytes:bytes.length,sha256:hash(bytes)});
     if(bytes.includes(0)){violations.push({file,rule:'unexpected binary content'});continue;}
     const content=bytes.toString('utf8'),value=normalize(content);
-    const patterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b/,/\bsk-or-v1-[A-Za-z0-9_-]{24,}/g,/(?:data:image\/[^;]+;base64,)[A-Za-z0-9+/=]{2000}/];
+    const patterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b/,/\bsk-(?:or-v1-|proj-|ant-api\d+-)?[A-Za-z0-9_-]{24,}/g,/(?:data:image\/[^;]+;base64,)[A-Za-z0-9+/=]{2000}/];
     for(const pattern of patterns)for(const match of content.matchAll(new RegExp(pattern.source,pattern.flags.includes('g')?pattern.flags:pattern.flags+'g'))){
       if(match[0].includes('not-a-real')||match[0].includes('fixture'))continue;
       violations.push({file,rule:'possible credential or embedded private asset'});break;
