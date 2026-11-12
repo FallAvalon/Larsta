@@ -86,6 +86,8 @@ try{
   await page.screenshot({path:'test-results/thinking-structured-mobile.png'});
   await area.evaluate(el=>{const header=el.querySelector('.message:last-child .thinking-toggle');el.scrollTop+=header.getBoundingClientRect().top-el.getBoundingClientRect().top+100;el.dispatchEvent(new Event('scroll'));});
   const collapse=page.getByRole('button',{name:'Свернуть размышления',exact:true});await collapse.waitFor();assert.equal(await collapse.count(),1);
+  const jump=page.getByRole('button',{name:'К последним сообщениям',exact:true});await jump.waitFor();
+  assert(await jump.evaluate(el=>{const r=el.getBoundingClientRect(),a=document.querySelector('.messages').getBoundingClientRect();return r.top>=a.top&&r.bottom<=a.bottom;}),'jump overlays expanded reasoning without cutting off the reading area');
   const before=await area.evaluate(el=>el.scrollTop);emit({reasoning:'\nЕщё одна новая мысль, пока читатель смотрит предыдущие.'});
   await page.waitForFunction(()=>document.querySelector('.message:last-child .thinking-content')?.textContent.includes('Ещё одна новая мысль'));
   assert(Math.abs(await area.evaluate(el=>el.scrollTop)-before)<3,'stream must not drag a reader away from older thoughts');

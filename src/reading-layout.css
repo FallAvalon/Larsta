@@ -3,6 +3,27 @@
 .chat-header { height: 72px; min-height: 72px; padding-top: 10px; padding-bottom: 10px; }
 .chat-header h2 { font-size: 18px; }
 .chat-subtitle { margin-top: 3px; }
+/* Float over the reading area without taking a separate row from it. */
+.composer-area .jump-to-bottom {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(28,30,34,.94);
+  color: #bdc3cd;
+  box-shadow: 0 4px 18px #0005;
+  transition: background-color .18s ease, color .18s ease;
+}
+.composer-area .jump-to-bottom:hover { background: #272a30; color: #f2f3f5; }
 
 @media (max-width:760px), (max-width:1000px) and (pointer:coarse) {
   .conversations-page { height: calc(100dvh - var(--nav-height) - env(safe-area-inset-bottom)); min-height: 0; padding-top: max(12px,env(safe-area-inset-top)); }
