@@ -82,7 +82,7 @@ try{
   assert.equal(store.messages(chat.id).at(-1).content,original.content);
 
   await page.getByRole('button',{name:'Перегенерировать ответ',exact:true}).last().click();
-  assert.equal(await page.locator('.tool-panel').evaluate(el=>getComputedStyle(el).borderWidth),'0px');
+  assert.equal(await page.getByRole('dialog',{name:'Другой ответ',exact:true}).evaluate(el=>getComputedStyle(el).borderWidth),'0px');
   await page.getByRole('button',{name:'Больше диалога',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'Больше диалога',exact:true}).getAttribute('aria-pressed'),'true');
   await page.getByRole('button',{name:'Больше диалога',exact:true}).click();
@@ -91,6 +91,7 @@ try{
   await page.getByRole('textbox',{name:'Пожелание к ответу',exact:true}).fill('Коротко и без моих действий');
   await page.screenshot({path:'test-results/borderless-regenerate-phone.png'});
   await page.setViewportSize({width:320,height:410});await layout('regenerate 320x410');
+  await page.waitForFunction(()=>document.querySelector('.regenerate-panel footer')?.getBoundingClientRect().bottom<=visualViewport.height+1);
   assert(await page.locator('.regenerate-panel .modal-scroll').evaluate(el=>el.clientHeight>=180),'short viewport should leave enough room to write and scroll');
   assert.equal(await page.getByRole('textbox',{name:'Пожелание к ответу',exact:true}).evaluate(el=>getComputedStyle(el).borderWidth),'0px');
   await page.screenshot({path:'test-results/borderless-regenerate-320.png'});

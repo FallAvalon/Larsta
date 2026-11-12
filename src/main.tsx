@@ -7,4 +7,7 @@ import './redesign.css';
 import './interactions.css';
 import './surfaces.css';
 import './providers.css';
+import './editor.css';
+import './thinking-regenerate.css';
+import './reading-layout.css';
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

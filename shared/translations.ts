@@ -427,6 +427,21 @@ PNG, JPEG, WebP или GIF · до 8 МБ|PNG, JPEG, WebP or GIF · up to 8 MB
 фэнтези, приключения, драма|fantasy, adventure, drama
 через запятую|comma-separated
 чтобы продолжить историю.|to continue your story.
+Развернуть: {0}|Expand: {0}
+Развернуть|Expand
+Применить|Apply
+Прежняя версия останется в ветке. История продолжится от этой реплики.|The previous version stays in a branch. The story continues from this message.
+Выйти без сохранения изменений?|Leave without saving changes?
+Не сохранять|Discard
+Продолжить правку|Keep editing
+Ctrl / ⌘ + Enter — сохранить|Ctrl / ⌘ + Enter to save
+Дождитесь завершения текущего действия.|Wait for the current action to finish.
+Размышляет…|Thinking…
+Размышления|Thoughts
+Свернуть размышления|Collapse thoughts
+Необязательно|Optional
+Подсказки|Suggestions
+Предыдущий ответ сохранится|The previous response will be kept
 `.trim().split('\n').map(line=>line.split('|'));
 export const english:Record<string,string>=Object.fromEntries(entries);
 Object.assign(english,providerEnglish);

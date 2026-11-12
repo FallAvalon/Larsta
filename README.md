@@ -32,6 +32,9 @@ For a phone on the same trusted Wi-Fi network, open the LAN address printed by t
 - Streamed replies, editable messages, response variants, regeneration guidance, continuation, branching, and undo with a preserved branch.
 - Independent providers and models for each chat, bounded context, optional reasoning display, paginated history, and restored reading position.
 - Mobile navigation, borderless menus, adjustable typography and colors, interaction animations, and reduced-motion support.
+- Spacious message editing and a keyboard-aware regeneration panel with draft recovery and one-use guidance.
+- Live two-line reasoning preview, Markdown-formatted thoughts on an expanded gray surface, and a floating collapse control for the latest open reasoning block.
+- Compact chat headers and a mobile chat-list header that hides on downward reading and returns on upward scrolling. Search, active filters, and input focus keep the panel visible.
 - Multiple connections to the same provider, server-side credentials, connection and generation tests, persistent device sessions, resumable generation subscriptions, automatic backups, and offline restore.
 
 The model catalog can be refreshed in settings; a manually entered ID works even when the catalog is unavailable. Larsta never silently substitutes another provider or model ID. The optional OpenCode compatibility profile changes attribution headers for OpenRouter only; provider access rules still apply. An auxiliary model field remains in the data format for compatibility but is not called.
@@ -93,7 +96,7 @@ node --test tests/publication.test.mjs
 npm run test:ui
 ```
 
-Browser checks in `tests/ui-*.mjs` use isolated temporary data and fake providers; they never call a real model account. Playwright is a development dependency. After building, run all eight suites with `npm run test:ui`, or one script such as `node tests/ui-providers.mjs`. The scripts use installed Chrome by default. Alternatively run `npx playwright install chromium` and set `LARSTA_BROWSER_CHANNEL=chromium` (`$env:LARSTA_BROWSER_CHANNEL='chromium'` in PowerShell). `LARSTA_PLAYWRIGHT_MODULE` can point to another installed Playwright module. Screenshots in `test-results/` are local artifacts excluded from publication. Automated protocol tests do not certify every live provider or replace visual review.
+Browser checks in `tests/ui-*.mjs` use isolated temporary data and fake providers; they never call a real model account. Playwright is a development dependency. After building, run all browser suites with `npm run test:ui`, or one script such as `node tests/ui-providers.mjs`. The scripts use installed Chrome by default. Alternatively run `npx playwright install chromium` and set `LARSTA_BROWSER_CHANNEL=chromium` (`$env:LARSTA_BROWSER_CHANNEL='chromium'` in PowerShell). `LARSTA_PLAYWRIGHT_MODULE` can point to another installed Playwright module. Screenshots in `test-results/` are local artifacts excluded from publication. Automated protocol tests do not certify every live provider or replace visual review.
 
 ## Publish a clean copy
 

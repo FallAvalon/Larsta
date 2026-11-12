@@ -1,0 +1,34 @@
+/* Reuse the existing colors; make more room for the story. */
+.conversations-header { flex-shrink: 0; }
+.chat-header { height: 72px; min-height: 72px; padding-top: 10px; padding-bottom: 10px; }
+.chat-header h2 { font-size: 18px; }
+.chat-subtitle { margin-top: 3px; }
+
+@media (max-width:760px), (max-width:1000px) and (pointer:coarse) {
+  .conversations-page { height: calc(100dvh - var(--nav-height) - env(safe-area-inset-bottom)); min-height: 0; padding-top: max(12px,env(safe-area-inset-top)); }
+  .conversations-header { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 220ms var(--motion-ease), opacity 160ms ease; }
+  .conversations-header>div { min-height: 0; overflow: hidden; }
+  .conversations-header.is-hidden { grid-template-rows: 0fr; opacity: 0; }
+  /* Keep controls keyboard-discoverable: focusing them reveals the panel. */
+  .conversations-header.is-hidden:focus-within { grid-template-rows: 1fr; opacity: 1; }
+  .conversations-header.is-hidden:not(:focus-within) { pointer-events: none; }
+  .conversations-header .mobile-wordmark { padding: 0; line-height: 24px; font-size: 18px; margin-bottom: 8px; }
+  .conversations-heading { align-items: center; margin-bottom: 12px; }
+  .conversations-heading h1 { margin: 0; font-size: 26px; }
+  .conversations-heading .page-add { width: 44px; min-width: 44px; height: 44px; }
+  .conversations-toolbar { margin-bottom: 18px; }
+  .conversations-toolbar .conversation-search { min-height: 46px; height: 46px; }
+  .conversations-toolbar .filter-toggle { width: 46px; min-width: 46px; height: 46px; }
+  .conversation-scroll { overflow-anchor: none; }
+  .chat-header { height: auto; min-height: calc(56px + env(safe-area-inset-top)); padding: calc(6px + env(safe-area-inset-top)) max(6px,env(safe-area-inset-right)) 6px max(6px,env(safe-area-inset-left)); gap: 6px; }
+  .chat-header h2 { font-size: 14px; }
+  .chat-header>.avatar { width: 28px; min-width: 28px; height: 28px; }
+  .chat-header>.icon-button, .chat-header .chat-settings-button, .chat-header .chat-menu>.icon-button { width: 44px; min-width: 44px; height: 44px; }
+  .chat-subtitle { margin-top: 2px; line-height: 1.4; }
+}
+@media (max-height:500px) and (max-width:760px), (max-height:500px) and (max-width:1000px) and (pointer:coarse) {
+  .conversations-header .mobile-wordmark { display: none; }
+  .conversations-heading { margin-bottom: 6px; }
+  .conversations-heading h1 { font-size: 22px; }
+  .conversations-toolbar { margin-bottom: 10px; }
+}

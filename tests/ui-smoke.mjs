@@ -131,9 +131,9 @@ try {
   assert.equal(await page.locator('.message:last-child a').getAttribute('href'),'https://example.com');
   assert.equal(await page.locator('.message:last-child li').count(),2);
   assert.ok((await page.locator('.message:last-child .message-text').innerText()).includes('& код'));
-  await page.getByRole('button',{name:'Thinking',exact:true}).click();
+  await page.getByRole('button',{name:'Размышления',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.thinking-reveal.open')?.getBoundingClientRect().height>10);
-  await page.getByRole('button',{name:'Thinking',exact:true}).click();
+  await page.getByRole('button',{name:'Размышления',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.thinking-reveal')?.getBoundingClientRect().height===0);
   finishStream();
   await page.getByRole('button',{name:'Остановить ответ',exact:true}).waitFor({state:'detached'});

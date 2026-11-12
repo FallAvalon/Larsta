@@ -1,6 +1,6 @@
 import { t, uiLocale } from './i18n';
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, Check, GitBranch, RefreshCw } from 'lucide-react';
+import { ArrowUpRight, Check, GitBranch } from 'lucide-react';
 import type { Chat, ChatGenerationSettings, Message, MessageVariantPreview, Model, Settings } from '../shared/types';
 import { api, json } from './api';
 import { ErrorBox, Loading } from './components';
@@ -9,21 +9,8 @@ import MessageMarkdown from './MessageMarkdown';
 import ProviderModels, { useProviders } from './ProviderModels';
 import { supportsParameter } from '../shared/types';
 
-const suggestions=['Короче','Больше диалога','Больше деталей','Не описывай мои действия'];
 const lengths=[512,1024,2048,4096];
-export function RegeneratePanel({onClose,onGenerate,locked=false}:{onClose:()=>void;onGenerate:(wish:string)=>void;locked?:boolean}) {
-  const [wish,setWish]=useState('');
-  const parts=wish.split(/[;\n]/).map(part=>part.trim()).filter(Boolean);
-  function toggle(text:string){
-    const exists=parts.some(part=>part.toLowerCase()===text.toLowerCase());
-    setWish((exists?parts.filter(part=>part.toLowerCase()!==text.toLowerCase()):[...parts,text]).join('; '));
-  }
-  return <ToolPanel title={t("Другой ответ")} className="regenerate-panel" onClose={onClose}><form onSubmit={e=>{e.preventDefault();if(!locked)onGenerate(wish.trim());}}><div className="modal-scroll">
-    <label>{t("Что изменить?")}<textarea aria-label={t("Пожелание к ответу")} rows={3} maxLength={1200} disabled={locked} placeholder={t("Например, больше диалога и меньше описаний")} value={wish} onChange={e=>setWish(e.target.value)}/></label>
-    <div className="wish-chips" aria-label={t("Быстрые пожелания")}>{suggestions.map(key=>{const text=t(key);return <button className="button small" type="button" key={text} disabled={locked} aria-pressed={parts.some(part=>part.toLowerCase()===text.toLowerCase())} onClick={()=>toggle(text)}>{text}</button>;})}</div>
-    <p className="field-help">{t("Пожелание необязательно и действует один раз. Прежний ответ останется в вариантах, а его продолжение — в отдельной ветке.")}</p>
-  </div><footer><button className="button" type="button" onClick={onClose}>{t("Отмена")}</button><button className="button primary" disabled={locked}><RefreshCw size={16}/>{t("Получить вариант")}</button></footer></form></ToolPanel>;
-}
+export { RegeneratePanel } from './RegeneratePanel';
 
 export function VariantsPanel({chatId,message,onClose,onChoose,busy,locked=false}:{chatId:string;message:Message;onClose:()=>void;onChoose:(id:string)=>Promise<void>;busy:boolean;locked?:boolean}) {
   const [variants,setVariants]=useState<MessageVariantPreview[]|null>(null),[error,setError]=useState('');

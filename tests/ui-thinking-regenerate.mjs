@@ -1,0 +1,124 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import express from 'express';
+import { createApp } from '../dist-server/server/app.js';
+import { RouterClient } from '../dist-server/server/openrouter.js';
+import { defaults } from '../dist-server/server/domain.js';
+
+const {chromium}=await import(process.env.LARSTA_PLAYWRIGHT_MODULE?pathToFileURL(process.env.LARSTA_PLAYWRIGHT_MODULE).href:'playwright');
+const dir=mkdtempSync(path.join(tmpdir(),'larsta-thinking-'));
+const long='## Контекст сцены\n\nСверяю **важные детали** и предыдущий разговор.\n\n## Следующий ответ\n\n1. Сохранить настроение сцены.\n2. Продолжить диалог.\n\n- Учесть контекст.\n- Оставить пространство для ответа.\n\n'+Array.from({length:70},(_,i)=>`Размышление ${i+1}. В архиве тихо. Я сверяю детали истории, вспоминаю разговор и обдумываю следующий ответ.`).join('\n\n');
+let emit,finish;const requests=[];
+const router=new RouterClient(async(url,options)=>{
+  if(String(url).endsWith('/models'))return Response.json({data:[{id:'fixture/story',name:'Story',context_length:64000,pricing:{prompt:'0',completion:'0'},supported_parameters:['temperature','max_tokens']}]});
+  requests.push(JSON.parse(String(options.body)));
+  return new Response(new ReadableStream({start(controller){
+    emit=delta=>controller.enqueue(new TextEncoder().encode('data: '+JSON.stringify({choices:[{delta}]})+'\n\n'));
+    finish=()=>{controller.enqueue(new TextEncoder().encode('data: '+JSON.stringify({choices:[{delta:{},finish_reason:'stop'}]})+'\n\n'));controller.close();};
+    options.signal.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')),{once:true});
+    emit({reasoning:'Вначале я вспоминаю сцену.\nПоследняя мысль перед ответом.'});
+  }}),{headers:{'Content-Type':'text/event-stream'}});
+});
+const {app,store,secrets,active}=createApp({dataDir:dir,router});
+store.saveSettings({...defaults,mainModel:'fixture/story'});secrets.setKey('fixture-key-not-real');
+const card=JSON.parse(readFileSync('examples/character-v2.json','utf8'));
+const character=store.saveCharacter({...card,data:{...card.data,name:'Sample Guide',first_mes:'Добро пожаловать в архив.'}},'');
+const chat=store.createChat(character.id);store.updateMessage(store.messages(chat.id)[0].id,'Добро пожаловать в архив.','complete',long);
+store.addMessage(chat.id,'user','Продолжим?');store.addMessage(chat.id,'assistant','Конечно. О чём поговорим?');
+app.use(express.static(path.resolve('dist')));
+const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
+const base='http://127.0.0.1:'+server.address().port;
+mkdirSync('test-results',{recursive:true});
+let browser,page;const errors=[];
+try{
+  browser=await chromium.launch({headless:true,channel:process.env.LARSTA_BROWSER_CHANNEL||'chrome'});
+  const context=await browser.newContext({locale:'ru-RU',viewport:{width:390,height:844},isMobile:true,hasTouch:true,reducedMotion:'no-preference'});
+  await context.request.post(base+'/api/auth',{data:{code:secrets.connectionCode}});page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(base+'/#chat/'+chat.id);
+  const dialog=page.getByRole('dialog',{name:'Другой ответ',exact:true});
+  const open=async()=>{
+    await page.locator('.message').last().getByRole('button',{name:'Перегенерировать ответ',exact:true}).click();await dialog.waitFor();
+    await page.waitForFunction(()=>document.querySelector('.regenerate-panel').getAnimations().length===0);
+  };
+  const layout=async(min=85)=>{
+    await page.waitForFunction(()=>{const v=visualViewport,b=document.querySelector('.editor-backdrop').getBoundingClientRect();return Math.abs(b.height-v.height)<1&&Math.abs(b.width-v.width)<1;});
+    const b=await dialog.evaluate(el=>{const r=el.getBoundingClientRect(),text=el.querySelector('textarea'),footer=el.querySelector('footer').getBoundingClientRect(),v=visualViewport;return {top:r.top,bottom:r.bottom,right:r.right,vtop:v.offsetTop,vbottom:v.offsetTop+v.height,vright:v.offsetLeft+v.width,text:text.clientHeight,footer:footer.bottom,border:getComputedStyle(el).borderWidth,background:getComputedStyle(el).backgroundColor,scroll:el.scrollHeight-el.clientHeight};});
+    assert(b.top>=b.vtop-1&&b.bottom<=b.vbottom+1&&b.right<=b.vright+1&&b.footer<=b.vbottom+1,JSON.stringify(b));assert(b.text>=min,JSON.stringify(b));assert(b.scroll<=1,JSON.stringify(b));
+    assert.equal(b.border,'0px');assert.equal(b.background,'rgba(28, 30, 34, 0.98)');
+  };
+  await open();await layout();await page.screenshot({path:'test-results/regenerate-mobile.png'});
+  const wish=page.getByRole('textbox',{name:'Пожелание к ответу',exact:true});await wish.fill('Больше диалога и меньше описаний.');
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});await open();assert.equal(await wish.inputValue(),'Больше диалога и меньше описаний.');
+  await page.reload();await open();assert.equal(await wish.inputValue(),'Больше диалога и меньше описаний.');
+  await wish.focus();await page.evaluate(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:360});Object.defineProperty(visualViewport,'offsetTop',{configurable:true,value:65});visualViewport.dispatchEvent(new Event('resize'));visualViewport.dispatchEvent(new Event('scroll'));});
+  await layout();await page.getByRole('button',{name:'Подсказки',exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Короче',exact:true}).isVisible(),false);
+  await page.screenshot({path:'test-results/regenerate-keyboard-simulation.png'});
+  await page.getByRole('button',{name:'Подсказки',exact:true}).click();await page.getByRole('button',{name:'Короче',exact:true}).click();assert.match(await wish.inputValue(),/Короче/);await layout();
+  await page.getByRole('button',{name:'Подсказки',exact:true}).click();
+  await page.evaluate(()=>{delete visualViewport.height;delete visualViewport.offsetTop;visualViewport.dispatchEvent(new Event('resize'));});
+  for(const viewport of [{width:320,height:410},{width:844,height:390},{width:1440,height:960}]){await page.setViewportSize(viewport);await layout();}
+  await page.waitForFunction(()=>document.querySelector('.regenerate-panel').getAnimations().length===0);
+  await page.screenshot({path:'test-results/regenerate-desktop.png'});
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('button',{name:'Получить вариант',exact:true}).click();await dialog.waitFor({state:'hidden'});
+  await page.locator('.is-thinking').waitFor();
+  assert.match(requests.at(-1).messages.at(-1).content,/Больше диалога/);
+  const newest=page.locator('.message').last(),block=newest.locator('.reasoning-block');
+  await page.waitForFunction(()=>document.querySelector('.is-thinking .thinking-tail-wrap')?.getBoundingClientRect().height>20);
+  emit({reasoning:'\n\n'+long+'\nСАМАЯ ПОСЛЕДНЯЯ МЫСЛЬ'});
+  await page.waitForFunction(()=>document.querySelector('.is-thinking .thinking-tail')?.textContent.endsWith('САМАЯ ПОСЛЕДНЯЯ МЫСЛЬ'));
+  const tail=await block.locator('.thinking-tail').evaluate(el=>({height:el.clientHeight,line:parseFloat(getComputedStyle(el).lineHeight),atEnd:el.scrollHeight-el.clientHeight-el.scrollTop}));assert(Math.abs(tail.height-tail.line*2)<2);assert(tail.atEnd<=1);
+  await page.screenshot({path:'test-results/thinking-preview-mobile.png'});
+  assert.equal(await block.evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)');
+  await block.getByRole('button',{name:'Размышляет…',exact:true}).click();
+  const area=page.locator('.messages');
+  await page.waitForFunction(()=>getComputedStyle(document.querySelector('.reasoning-block.is-open')).backgroundColor==='rgb(28, 30, 34)');
+  assert.equal(await block.locator('h2').count(),2);
+  assert.equal(await block.locator('ol > li').count(),2);
+  assert.equal(await block.locator('ul > li').count(),2);
+  assert.equal(await block.locator('strong').textContent(),'важные детали');
+  assert.equal(await block.evaluate(el=>getComputedStyle(el).borderWidth),'0px');
+  await area.evaluate(el=>{const header=el.querySelector('.message:last-child .thinking-toggle');el.scrollTop+=header.getBoundingClientRect().top-el.getBoundingClientRect().top-12;});
+  await page.screenshot({path:'test-results/thinking-structured-mobile.png'});
+  await area.evaluate(el=>{const header=el.querySelector('.message:last-child .thinking-toggle');el.scrollTop+=header.getBoundingClientRect().top-el.getBoundingClientRect().top+100;el.dispatchEvent(new Event('scroll'));});
+  const collapse=page.getByRole('button',{name:'Свернуть размышления',exact:true});await collapse.waitFor();assert.equal(await collapse.count(),1);
+  const before=await area.evaluate(el=>el.scrollTop);emit({reasoning:'\nЕщё одна новая мысль, пока читатель смотрит предыдущие.'});
+  await page.waitForFunction(()=>document.querySelector('.message:last-child .thinking-content')?.textContent.includes('Ещё одна новая мысль'));
+  assert(Math.abs(await area.evaluate(el=>el.scrollTop)-before)<3,'stream must not drag a reader away from older thoughts');
+  await page.waitForFunction(()=>document.querySelector('.thinking-collapse')?.getAnimations().every(animation=>animation.playState==='finished'));
+  await page.screenshot({path:'test-results/thinking-expanded-mobile.png'});
+  await collapse.click();await collapse.waitFor({state:'hidden'});
+  await page.waitForFunction(()=>getComputedStyle(document.querySelector('.message:last-child .reasoning-block')).backgroundColor==='rgba(0, 0, 0, 0)');
+  assert.equal(await block.getByRole('button',{name:'Размышляет…',exact:true}).getAttribute('aria-expanded'),'false');
+  assert(await block.locator('.thinking-toggle').evaluate(el=>{const box=el.getBoundingClientRect(),area=el.closest('.messages').getBoundingClientRect();return box.top>=area.top-1&&box.bottom<=area.bottom;}),'collapse returns to the header');
+  emit({content:'Конечно, давай продолжим разговор.'});
+  await page.waitForFunction(()=>!document.querySelector('.message:last-child .is-thinking'));
+  await page.waitForFunction(()=>document.querySelector('.message:last-child .thinking-tail-wrap')?.getBoundingClientRect().height===0);
+  assert.equal(await block.locator('.thinking-icon').evaluate(el=>getComputedStyle(el).animationName),'none');
+  // A manually opened block stays open when the response starts and finishes.
+  await block.getByRole('button',{name:'Размышления',exact:true}).click();finish();
+  await page.getByRole('button',{name:'Остановить ответ',exact:true}).waitFor({state:'hidden'});
+  assert.equal(await block.getByRole('button',{name:'Размышления',exact:true}).getAttribute('aria-expanded'),'true');
+  assert(store.messages(chat.id).at(-1).reasoning.includes('Ещё одна новая мысль'));
+  await area.evaluate(el=>{const header=el.querySelector('.message:last-child .thinking-toggle');el.scrollTop+=header.getBoundingClientRect().top-el.getBoundingClientRect().top+100;el.dispatchEvent(new Event('scroll'));});await collapse.waitFor();
+  // Keyboard viewport keeps the floating collapse button under the chat header.
+  const placement=await collapse.boundingBox();assert(placement.y>=0&&placement.y+placement.height<=844);
+  await collapse.click();
+  const old=page.locator('.message').first().locator('.reasoning-block');await old.getByRole('button',{name:'Размышления',exact:true}).click();
+  await area.evaluate(el=>{const header=el.querySelector('.message .thinking-toggle');el.scrollTop+=header.getBoundingClientRect().top-el.getBoundingClientRect().top+100;el.dispatchEvent(new Event('scroll'));});
+  await page.waitForTimeout(100);assert.equal(await collapse.count(),0,'historic messages never get floating buttons');
+  await page.emulateMedia({reducedMotion:'reduce'});await page.reload();
+  await page.locator('.message').last().waitFor();await open();assert.equal(await dialog.evaluate(el=>el.getAnimations().length),0);
+  assert.equal(await wish.inputValue(),'','submitted wish must not leak into the next regeneration');
+  await page.getByRole('button',{name:'Получить вариант',exact:true}).click();await page.locator('.is-thinking').waitFor();
+  assert.equal(await page.locator('.is-thinking .thinking-icon').evaluate(el=>getComputedStyle(el).animationName),'none');
+  emit({content:'Новый ответ без пожеланий.'});finish();await page.getByRole('button',{name:'Остановить ответ',exact:true}).waitFor({state:'hidden'});
+  assert(!requests.at(-1).messages.at(-1).content.includes('Больше диалога'));
+  assert.deepEqual(errors,[]);
+  console.log('Thinking/regenerate UI passed: two-line live tail, completion, manual expansion, reading position, latest-only floating collapse, draft recovery, one-use wishes, keyboard viewport simulation, mobile/desktop/landscape, palette and reduced motion.');
+}catch(error){await page?.screenshot({path:'test-results/thinking-regenerate-failure.png'}).catch(()=>{});throw error;}
+finally{await browser?.close();for(const controller of active.values())controller.abort('user');server.closeAllConnections();await new Promise(resolve=>server.close(resolve));store.close();rmSync(dir,{recursive:true,force:true});}

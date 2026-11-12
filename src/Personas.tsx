@@ -6,13 +6,14 @@ import type { Chat, ChatPersona, Persona, PersonaData } from '../shared/types';
 import { api, json } from './api';
 import { ErrorBox, Modal } from './components';
 import { Presence } from './motion';
+import { ExpandableTextField } from './TextEditor';
 
 const empty:PersonaData={name:'',appearance:'',personality:'',description:'',avatar:null};
 export function PersonaAvatar({persona}:{persona?:Pick<PersonaData,'name'|'avatar'>}) {
   return <div className="avatar user-avatar">{persona?.avatar?<img src={persona.avatar} alt=""/>:<span>{persona?.name.slice(0,1).toUpperCase()||<UserRound size={17}/>}</span>}</div>;
 }
 function Fields({value,onChange}:{value:PersonaData;onChange:(value:PersonaData)=>void}) {
-  return <div className="persona-fields"><label className="persona-name-field">{t("Имя персоны")}<input required maxLength={120} value={value.name} onChange={e=>onChange({...value,name:e.target.value})}/></label>{(['appearance','personality','description'] as const).map((key,index)=><label className={'persona-field-'+key} key={key}>{[t("Внешность"),t("Характер"),t("Описание и важные детали")][index]}<textarea rows={key==='description'?4:3} maxLength={key==='description'?20000:6000} value={value[key]} onChange={e=>onChange({...value,[key]:e.target.value})} placeholder={[t("Рост, внешность, одежда и другие приметы"),t("Манера общения, привычки, ценности"),t("Биография, способности, отношения — что собеседнику нужно знать")][index]}/></label>)}</div>;
+  return <div className="persona-fields"><label className="persona-name-field">{t("Имя персоны")}<input required maxLength={120} value={value.name} onChange={e=>onChange({...value,name:e.target.value})}/></label>{(['appearance','personality','description'] as const).map((key,index)=><ExpandableTextField className={'persona-field-'+key} key={key} label={[t("Внешность"),t("Характер"),t("Описание и важные детали")][index]} rows={key==='description'?6:3} maxLength={key==='description'?20000:6000} value={value[key]} onChange={text=>onChange({...value,[key]:text})} placeholder={[t("Рост, внешность, одежда и другие приметы"),t("Манера общения, привычки, ценности"),t("Биография, способности, отношения — что собеседнику нужно знать")][index]}/>)}</div>;
 }
 function PersonaEditor({persona,onClose,onSaved}:{persona?:Persona;onClose:()=>void;onSaved:()=>void}) {
   const [value,setValue]=useState<PersonaData>(persona||empty),[file,setFile]=useState<File|null>(null),[preview,setPreview]=useState(persona?.avatar||''),[busy,setBusy]=useState(false),[error,setError]=useState('');

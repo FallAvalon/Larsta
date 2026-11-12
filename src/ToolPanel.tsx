@@ -42,12 +42,13 @@ export function ToolPanel({title,children,onClose,wide=false,compact=false,class
     const panel=ref.current,previous=anchor||document.activeElement as HTMLElement|null;
     panel?.focus({preventScroll:true});
     const keydown=(event:KeyboardEvent)=>{
-      if(event.key==='Escape'&&!event.isComposing&&!panel?.inert){
+      if(event.key==='Escape'&&!event.isComposing&&!panel?.inert&&!document.querySelector('.editor-backdrop')){
         event.stopPropagation();close.current();
       }
     };
     const outside=(event:PointerEvent)=>{
       const target=event.target as Node;
+      if(document.querySelector('.editor-backdrop'))return;
       if(!panel?.inert&&!panel?.contains(target)&&!anchor?.contains(target))close.current();
     };
     document.addEventListener('keydown',keydown);

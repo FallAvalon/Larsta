@@ -1,9 +1,10 @@
 import { t, uiLocale } from './i18n';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, ChevronLeft, ChevronRight, MessageSquare, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import type { Character, Chat } from '../shared/types';
 import { api } from './api';
 import { Avatar, ErrorBox, Loading } from './components';
+import { useReadingHeader } from './useReadingHeader';
 
 export type ChatPage = {items:Chat[]; total:number; offset:number; limit:number};
 const pageSize=20;
@@ -15,6 +16,10 @@ export default function ChatsPage({chats,characters,onOpen,onBrowse}:{
   const [query,setQuery]=useState(''),[characterId,setCharacterId]=useState(''),[sort,setSort]=useState('recent');
   const [page,setPage]=useState(0),[filters,setFilters]=useState(false);
   const [result,setResult]=useState<ChatPage|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true);
+  const list=useRef<HTMLDivElement>(null),header=useRef<HTMLDivElement>(null);
+  const pinned=!!query||filters||!!characterId||sort!=='recent'||loading||!!error;
+  const hidden=useReadingHeader(list,header,pinned);
+  useEffect(()=>{if(list.current)list.current.scrollTop=0;},[query,characterId,sort,page]);
   useEffect(()=>{
     const controller=new AbortController();
     const timer=setTimeout(()=>{
@@ -33,14 +38,17 @@ export default function ChatsPage({chats,characters,onOpen,onBrowse}:{
   const characterMap=new Map(characters.map(c=>[c.id,c]));
   const items=result?.items.filter(chat=>chat.id!==featured?.id)||[];
   return <div className="page conversations-page">
+    <div ref={header} className={'conversations-header'+(hidden?' is-hidden':'')}><div>
+    <a className="mobile-wordmark" href="#chats">Larsta<span>.</span></a>
     <div className="conversations-heading"><div><h1>{t("Чаты ")}<span className="count">{result?.total??chats.length}</span></h1><p>{t("Возвращайтесь туда, где остановилась история.")}</p></div><button className="icon-button page-add" aria-label={t("Новая история")} title={t("Новая история")} onClick={onBrowse}><Plus size={24}/></button></div>
     <div className="conversations-toolbar">
       <div className="conversation-search"><Search size={19}/><input aria-label={t("Поиск чатов")} placeholder={t("Найти историю")} value={query} onChange={e=>{setQuery(e.target.value);setPage(0);}}/>{query&&<button className="icon-button" aria-label={t("Очистить поиск чатов")} onClick={()=>{setQuery('');setPage(0);}}><X size={17}/></button>}</div>
       <button className={'icon-button filter-toggle '+(filters||characterId||sort!=='recent'?'selected':'')} aria-label={t("Фильтры чатов")} aria-expanded={filters} onClick={()=>setFilters(!filters)}><SlidersHorizontal size={20}/></button>
     </div>
     {filters&&<div className="conversation-filters"><label>{t("Персонаж")}<select aria-label={t("Чаты с персонажем")} value={characterId} onChange={e=>{setCharacterId(e.target.value);setPage(0);}}><option value="">{t("Все персонажи")}</option>{characters.map(c=><option key={c.id} value={c.id}>{c.card.data.name}</option>)}</select></label><label>{t("Порядок")}<select aria-label={t("Порядок чатов")} value={sort} onChange={e=>{setSort(e.target.value);setPage(0);}}><option value="recent">{t("Недавние")}</option><option value="oldest">{t("Сначала старые")}</option><option value="name">{t("По названию")}</option></select></label></div>}
+    </div></div>
     <ErrorBox text={error}/>
-    <div className="conversation-scroll" aria-busy={loading}>
+    <div ref={list} className="conversation-scroll" aria-busy={loading} tabIndex={0}>
       {featured&&<section className="resume-section"><div className="section-eyebrow">{t("ПРОДОЛЖИТЬ")}</div><article className="resume-card"><div className="resume-portrait">{featured.avatar?<img src={featured.avatar} alt=""/>:<span>{(featured.characterName||'L').slice(0,1)}</span>}</div><div className="resume-content"><h2>{featured.title}</h2><span>{featured.characterName}</span><p>{excerpt(featured.lastMessage||t("Ваша история ждёт продолжения."))}</p><button className="button primary" onClick={()=>onOpen(featured.id)}>{t("Продолжить")}<ArrowRight size={18}/></button></div></article></section>}
       {featured&&items.length>0&&<h2 className="list-heading">{t("Недавние истории")}</h2>}
       {loading&&!result?<Loading/>:items.length>0?<div className="conversation-list" aria-label={t("Список чатов")}>{items.map(chat=><button className="conversation-row" key={chat.id} onClick={()=>onOpen(chat.id)}>
