@@ -6,6 +6,7 @@ export const providerPresets: Record<ProviderKind, Omit<ProviderConfig, 'id' | '
   ollama: {kind:'ollama',name:'Ollama',baseUrl:'http://localhost:11434/v1',auth:'none',compatibility:{tokenLimit:'max_tokens',temperature:true,reasoning:'reasoning_effort'}},
   omniroute: {kind:'omniroute',name:'OmniRoute',baseUrl:'http://localhost:20128/v1',auth:'none',compatibility:{tokenLimit:'max_tokens',temperature:true,reasoning:'reasoning_effort'}},
   polza: {kind:'polza',name:'Polza.ai',baseUrl:'https://polza.ai/api/v1',auth:'bearer',compatibility:{tokenLimit:'max_tokens',temperature:true,reasoning:'reasoning'}},
+  demonroute: {kind:'demonroute',name:'Demon Route',baseUrl:'https://api.demonroute.com/v1',auth:'bearer',compatibility:{tokenLimit:'max_tokens',temperature:true,reasoning:'none'}},
   custom: {kind:'custom',name:'OpenAI-compatible',baseUrl:'',auth:'bearer',compatibility:{tokenLimit:'max_tokens',temperature:true,reasoning:'none'}}
 };
 export const legacyProvider: ProviderConfig = {...providerPresets.openrouter,id:'openrouter',revision:1,lastModel:''};

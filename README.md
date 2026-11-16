@@ -2,7 +2,7 @@
 
 [Русская версия](README.ru.md)
 
-A self-hosted character chat app for your computer and phone. React, TypeScript, Vite, Node.js, and SQLite, with OpenRouter, LM Studio, Ollama, OmniRoute, Polza.ai, and custom OpenAI-compatible APIs.
+A self-hosted character chat app for your computer and phone. React, TypeScript, Vite, Node.js, and SQLite, with OpenRouter, LM Studio, Ollama, OmniRoute, Polza.ai, Demon Route, and custom OpenAI-compatible APIs.
 
 The public source starts with an empty library. The optional character in `examples/character-v2.json` is a synthetic library guide created for the example and tests. No personal conversations, characters, uploads, credentials, or saved settings are included.
 
@@ -50,6 +50,7 @@ Every connection has its own name, base URL, authentication settings, key, and c
 | [Ollama](https://docs.ollama.com/api/openai-compatibility) | `http://localhost:11434/v1` | None |
 | [OmniRoute](https://github.com/cheaper-inference/OmniRoute) | `http://localhost:20128/v1` | None; configure a key if your deployment requires one |
 | [Polza.ai](https://polza.ai/docs/api-reference/introduction) | `https://polza.ai/api/v1` | Bearer key |
+| [Demon Route](https://demonroute.com/models) | `https://api.demonroute.com/v1` | Bearer key |
 | OpenAI-compatible | Your API base URL | Configurable |
 
 Requests come from the Larsta server. **localhost means the computer running Larsta**, including when you use a phone. For a model server on another computer, use its LAN address and enable access in that server. Local model servers must be running and have an appropriate model available; Larsta does not install or download models.
