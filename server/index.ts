@@ -18,7 +18,13 @@ try {
   process.exit(1);
 }
 const dataDir=path.resolve(process.env.LARSTA_DATA_DIR||'data');
-const release=lockDataDirectory(dataDir);
+let release:()=>void;
+try {
+  release=lockDataDirectory(dataDir);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : 'Не удалось заблокировать папку данных.');
+  process.exit(1);
+}
 process.once('exit',release);
 const {app,store,secrets,active} = createApp({dataDir,port});
 if(process.argv.includes('--dev')) {

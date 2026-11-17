@@ -3,6 +3,7 @@ import { useSyncExternalStore, type CSSProperties } from 'react';
 export interface ChatAppearance {
   animations: boolean;
   wallpaper: boolean;
+  customWallpaper: string | null;
   wallpaperDim: number;
   wallpaperBlur: number;
   wallpaperPosition: number;
@@ -18,7 +19,7 @@ export interface ChatAppearance {
 }
 
 export const defaultAppearance: ChatAppearance = {
-  animations: true, wallpaper: false, wallpaperDim: 82, wallpaperBlur: 2, wallpaperPosition: 35, wallpaperFit: 'cover',
+  animations: true, wallpaper: true, customWallpaper: null, wallpaperDim: 82, wallpaperBlur: 2, wallpaperPosition: 35, wallpaperFit: 'cover',
   fontSize: 18, lineHeight: 1.7, fontFamily: 'sans',
   textColor: '#e5e7eb', italicColor: '#b5bac4', boldColor: '#f5f5f5',
   quoteColor: '#c2c6cf', linkColor: '#dce1eb'
@@ -34,6 +35,7 @@ function normalize(value: unknown): ChatAppearance {
   if (typeof input.lineHeight === 'number' && Number.isFinite(input.lineHeight)) result.lineHeight = Math.min(2.3, Math.max(1.3, input.lineHeight));
   if (typeof input.animations === 'boolean') result.animations = input.animations;
   if (typeof input.wallpaper === 'boolean') result.wallpaper = input.wallpaper;
+  if (typeof input.customWallpaper === 'string' && input.customWallpaper.length <= 2_000_000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(input.customWallpaper)) result.customWallpaper = input.customWallpaper;
   for (const [key, max] of [['wallpaperDim', 100], ['wallpaperBlur', 20], ['wallpaperPosition', 100]] as const) {
     const value = input[key];
     if (typeof value === 'number' && Number.isFinite(value)) result[key] = Math.min(max, Math.max(0, value));
@@ -56,10 +58,11 @@ window.addEventListener('storage', event => {
 });
 function subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
 function update(changes: Partial<ChatAppearance>) {
-  current = normalize({ ...current, ...changes });
-  try { localStorage.setItem(storageKey, JSON.stringify(current)); storageFailed = false; }
-  catch { storageFailed = true; }
+  const next = normalize({ ...current, ...changes });
+  try { localStorage.setItem(storageKey, JSON.stringify(next)); current = next; storageFailed = false; }
+  catch { storageFailed = true; current = { ...current }; }
   listeners.forEach(listener => listener());
+  return !storageFailed;
 }
 export function useChatAppearance() {
   const appearance = useSyncExternalStore(subscribe, () => current);

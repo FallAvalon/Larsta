@@ -16,15 +16,18 @@
 .reasoning-block.is-open { padding: 8px 16px 16px; background: #1c1e22; }
 .reasoning-block.is-open .thinking-toggle { min-height: 40px; font-weight: 500; }
 .reasoning-block .thinking-content { margin: 12px 0 0; white-space: normal; font-size: 14px; line-height: 1.75; }
-.thinking-content > :first-child { margin-top: 0; }
-.thinking-content > :last-child { margin-bottom: 0; }
+.thinking-step { position: relative; display: flow-root; padding: 0 0 18px 26px; }
+.thinking-step:last-child { padding-bottom: 0; }
+.thinking-step::before { content: ''; position: absolute; left: 3.5px; top: calc(.875em - 2.5px); width: 5px; height: 5px; border-radius: 50%; background: #a5afbd; box-shadow: 0 0 0 2px #a5afbd10, inset 0 1px 1px #ffffff30; }
+.thinking-step:not(:last-child)::after { content: ''; position: absolute; left: 5.5px; top: calc(.875em + 5px); bottom: calc(-.875em + 5px); width: 1px; background: linear-gradient(#a5afbd45, #a5afbd24, #a5afbd45); pointer-events: none; }
+.thinking-step > :first-child { margin-top: 0; }
+.thinking-step > :last-child { margin-bottom: 0; }
 .thinking-content p { margin: 0 0 16px; line-height: inherit; white-space: pre-wrap; }
-.thinking-content > p, .thinking-content > :is(h1,h2,h3,h4,h5,h6) { position: relative; padding-left: 20px; }
-.thinking-content > p::before, .thinking-content > :is(h1,h2,h3,h4,h5,h6)::before { content: ''; position: absolute; left: 2px; top: .7em; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .35; }
 .thinking-content :is(h1,h2,h3,h4,h5,h6) { color: #bdc3cd; font-size: 14px; font-weight: 600; line-height: 1.65; letter-spacing: 0; margin: 24px 0 10px; }
-.thinking-content > :is(h1,h2,h3,h4,h5,h6) + p::before { display: none; }
 .thinking-content :is(ol,ul) { padding-left: 22px; margin: 12px 0 20px; }
 .thinking-content li { padding-left: 6px; margin: 9px 0; white-space: pre-wrap; }
+.thinking-step > :is(ol,ul) > li:first-child { margin-top: 0; }
+.thinking-step > :is(ol,ul) > li:last-child { margin-bottom: 0; }
 .thinking-content li::marker { color: #929ba9; font-size: 11px; }
 .thinking-content li p { margin: 8px 0; }
 .thinking-content li :is(ol,ul) { margin: 8px 0; }

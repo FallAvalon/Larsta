@@ -17,6 +17,27 @@ const components: Components = {
   img: ({ alt }) => <span className="muted">{t("[изображение: ")}{alt}]</span>
 };
 
+// Keep a heading and its introduction on one step, with the original Markdown
+// inside. Equal step gutters let the rail join nodes at any text height.
+function timelinePlugin() {
+  return (tree: Root) => {
+    const steps: RootContent[] = [];
+    for (const node of tree.children) {
+      if (node.type === 'text' && !node.value.trim()) continue;
+      if (node.type !== 'element') { steps.push(node); continue; }
+      const last = steps.at(-1);
+      const previous = last?.type === 'element' ? last : undefined;
+      const heading = previous?.children[0];
+      if (node.tagName === 'p' && previous?.children.length === 1 && heading?.type === 'element' && /^h[1-6]$/.test(heading.tagName)) {
+        previous.children.push(node);
+      } else {
+        steps.push({type:'element', tagName:'div', properties:{className:['thinking-step']}, children:[node]});
+      }
+    }
+    tree.children = steps;
+  };
+}
+
 // Annotate the existing Markdown text leaves; Markdown is still parsed as one
 // document, so emphasis, links, lists and code can span arbitrary SSE fragments.
 // Source offsets and elapsed time stop a reparse from fading old words again.
@@ -53,7 +74,7 @@ function fadePlugin({ source, receipts }: { source: string; receipts: Receipt[] 
   };
 }
 
-const MessageMarkdown = memo(function MessageMarkdown({ content, streaming }: { content: string; streaming: boolean }) {
+const MessageMarkdown = memo(function MessageMarkdown({ content, streaming, timeline = false }: { content: string; streaming: boolean; timeline?: boolean }) {
   const history = useRef<FadeHistory>({ source: streaming ? '' : content, receipts: [] });
   const now = performance.now();
   const previous = history.current;
@@ -63,7 +84,10 @@ const MessageMarkdown = memo(function MessageMarkdown({ content, streaming }: { 
     receipts.push({ start: previous.source.length, end: content.length, at: now });
   }
   history.current = { source: content, receipts };
-  return <ReactMarkdown components={components} rehypePlugins={receipts.length ? [[fadePlugin, { source: content, receipts }]] : []}>{content}</ReactMarkdown>;
+  const plugins: NonNullable<ComponentProps<typeof ReactMarkdown>['rehypePlugins']> = [];
+  if (receipts.length) plugins.push([fadePlugin, {source: content, receipts}]);
+  if (timeline) plugins.push(timelinePlugin);
+  return <ReactMarkdown components={components} rehypePlugins={plugins}>{content}</ReactMarkdown>;
 });
 
 export default MessageMarkdown;

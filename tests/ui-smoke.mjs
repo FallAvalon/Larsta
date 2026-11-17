@@ -41,7 +41,7 @@ try {
   browser=await chromium.launch({headless:true,channel:process.env.LARSTA_BROWSER_CHANNEL||'chrome'});
   const context=await browser.newContext({locale:'ru-RU',viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await context.request.post(base+'/api/auth',{data:{code:secrets.connectionCode}});
-  // Explicitly test the optional wallpaper; the redesigned default is a quiet canvas.
+  // Exercise the wallpaper controls with the character portrait.
   await context.addInitScript(()=>{if(!localStorage.getItem('larsta-chat-appearance-v1'))localStorage.setItem('larsta-chat-appearance-v1',JSON.stringify({wallpaper:true}));});
   const page=await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -114,7 +114,7 @@ try {
   await checkLayout('desktop');
   assert(await jump.evaluate(el=>{const r=el.getBoundingClientRect(),area=document.querySelector('.messages').getBoundingClientRect();return r.top>=area.top&&r.bottom<=area.bottom;}),'jump stays over the reading area on desktop');
   await page.getByRole('button',{name:'Настройки чата',exact:true}).click();
-  await page.getByRole('checkbox',{name:'Аватарка на фоне чата',exact:true}).uncheck();
+  await page.getByRole('checkbox',{name:'Показывать обои',exact:true}).uncheck();
   assert.equal(await page.locator('.chat-page>.chat-wallpaper').count(),0);
   await page.getByRole('button',{name:'Готово',exact:true}).click();
   await page.setViewportSize({width:390,height:844});

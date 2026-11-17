@@ -1,8 +1,9 @@
-import { t, uiLocale } from './i18n';
-import { Check, Image, Palette, RotateCcw, Type } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { t } from './i18n';
+import { Check, Image, Palette, RotateCcw, Type, Upload } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { appearanceStyle, useChatAppearance, type ChatAppearance } from './appearance';
+import { prepareWallpaper } from './wallpaper';
 
 const colors: { key: keyof Pick<ChatAppearance, 'textColor' | 'italicColor' | 'boldColor' | 'quoteColor' | 'linkColor'>; title: string; syntax: string }[] = [
   { key: 'textColor', title: 'Основной текст', syntax: 'Обычная речь' },
@@ -21,6 +22,18 @@ function ColorSetting({title,syntax,value,onChange}:{title:string;syntax:string;
 
 export default function ChatAppearanceSettings({avatar}:{avatar?:string}) {
   const { appearance, update, reset, storageFailed } = useChatAppearance();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const wallpaper = appearance.customWallpaper || avatar;
+  async function upload(file: File) {
+    setUploading(true); setUploadError('');
+    try {
+      const customWallpaper = await prepareWallpaper(file);
+      if (!update({ customWallpaper, wallpaper: true })) throw new Error(t('Не удалось сохранить обои. Освободите место в браузере и попробуйте снова.'));
+    } catch (error) { setUploadError(error instanceof Error ? error.message : t('Не удалось обработать изображение.')); }
+    finally { setUploading(false); }
+  }
   return <div className="appearance-settings">
     <p className="appearance-description">{t("Шрифт, цвета и фон сохраняются в этом браузере.")}</p>
     <div className="appearance-subheading"><Type size={16}/><h3>{t("Чтение")}</h3></div>
@@ -29,10 +42,17 @@ export default function ChatAppearanceSettings({avatar}:{avatar?:string}) {
       <label className="appearance-range"><span>{t("Межстрочный интервал ")}<output>{appearance.lineHeight.toFixed(2)}</output></span><input aria-label={t("Межстрочный интервал чата")} type="range" min="1.3" max="2.3" step="0.05" value={appearance.lineHeight} onChange={e => update({ lineHeight: Number(e.target.value) })}/></label>
       <div className="appearance-font"><span>{t("Шрифт сообщений")}</span><div className="segmented-control" role="group" aria-label={t("Шрифт сообщений")}><button type="button" aria-pressed={appearance.fontFamily === 'sans'} onClick={() => update({ fontFamily: 'sans' })}><Type size={15}/>{t("Обычный")}</button><button type="button" className="serif-option" aria-pressed={appearance.fontFamily === 'serif'} onClick={() => update({ fontFamily: 'serif' })}>Aa <span>{t("Книжный")}</span></button></div></div>
     </div>
-    <div className="appearance-preview" style={appearanceStyle(appearance)}>{appearance.wallpaper&&avatar&&<div className="chat-wallpaper" aria-hidden="true"><img src={avatar} alt=""/></div>}<div className="appearance-preview-heading"><span className="mini-dot"/>{t("ПРЕДПРОСМОТР")}</div><div className="message-text"><ReactMarkdown components={{ a: ({ children }) => <span className="preview-link">{children}</span> }}>{t(preview)}</ReactMarkdown></div></div>
-    <div className="appearance-subheading"><Image size={16}/><h3>{t("Фон из аватарки персонажа")}</h3></div>
-    <label className="wallpaper-switch"><span>{t("Аватарка на фоне чата")}</span><input type="checkbox" checked={appearance.wallpaper} onChange={e=>update({wallpaper:e.target.checked})}/></label>
-    <p className="wallpaper-help">{t("Фон автоматически меняется вместе с персонажем. Без аватарки остаётся тёмный фон.")}</p>
+    <div className="appearance-preview" style={appearanceStyle(appearance)}>{appearance.wallpaper&&wallpaper&&<div className="chat-wallpaper" aria-hidden="true"><img src={wallpaper} alt=""/></div>}<div className="appearance-preview-heading"><span className="mini-dot"/>{t("ПРЕДПРОСМОТР")}</div><div className="message-text"><ReactMarkdown components={{ a: ({ children }) => <span className="preview-link">{children}</span> }}>{t(preview)}</ReactMarkdown></div></div>
+    <div className="appearance-subheading"><Image size={16}/><h3>{t("Обои чата")}</h3></div>
+    <label className="wallpaper-switch"><span>{t("Показывать обои")}</span><input type="checkbox" checked={appearance.wallpaper} onChange={e=>update({wallpaper:e.target.checked})}/></label>
+    <p className="wallpaper-help">{appearance.customWallpaper ? t("Выбраны свои обои. Они сохраняются только в этом браузере.") : t("По умолчанию на фоне — аватарка персонажа. Без аватарки остаётся тёмный фон.")}</p>
+    <div className="wallpaper-actions">
+      <input ref={fileInput} type="file" accept="image/*" hidden aria-label={t("Выбрать обои")} disabled={uploading} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)void upload(file);}}/>
+      <button type="button" className="button" disabled={uploading} onClick={()=>fileInput.current?.click()}><Upload size={15}/>{uploading ? t("Обработка…") : t("Загрузить свои обои")}</button>
+      {appearance.customWallpaper&&<button type="button" className="button small" disabled={uploading} onClick={()=>{update({customWallpaper:null,wallpaper:true});setUploadError('');}}><RotateCcw size={14}/>{t("Вернуть аватарку")}</button>}
+    </div>
+    <p className="wallpaper-help">{t("Выберите изображение с телефона или компьютера, до 20 МБ.")}</p>
+    {uploadError&&<p className="error-text" role="alert">{uploadError}</p>}
     {appearance.wallpaper&&<div className="appearance-reading">
       <label className="appearance-range"><span>{t("Затемнение ")}<output>{appearance.wallpaperDim}%</output></span><input aria-label={t("Затемнение фона")} type="range" min="0" max="100" value={appearance.wallpaperDim} onChange={e=>update({wallpaperDim:Number(e.target.value)})}/></label>
       <label className="appearance-range"><span>{t("Размытие ")}<output>{appearance.wallpaperBlur} px</output></span><input aria-label={t("Размытие фона")} type="range" min="0" max="20" value={appearance.wallpaperBlur} onChange={e=>update({wallpaperBlur:Number(e.target.value)})}/></label>
@@ -42,6 +62,6 @@ export default function ChatAppearanceSettings({avatar}:{avatar?:string}) {
     <div className="appearance-colors">{colors.map(color => <ColorSetting key={color.key} title={color.title} syntax={color.syntax} value={appearance[color.key]} onChange={value=>update({[color.key]:value})}/>)}</div>
     <label className="wallpaper-switch"><span>{t("Плавные анимации")}</span><input type="checkbox" checked={appearance.animations} onChange={e=>update({animations:e.target.checked})}/></label>
     <p className="wallpaper-help">{t("Плавное открытие окон и появление новых сообщений. Учитывается системная настройка уменьшения движения.")}</p>
-    <div className="appearance-bottom"><span className={storageFailed ? 'error-text' : ''}><Check size={13}/>{storageFailed ? t("Браузер не разрешил сохранение настроек.") : t("Сохраняется в этом браузере")}</span><button type="button" className="button small" onClick={reset}><RotateCcw size={14}/>{t("Сбросить оформление")}</button></div>
+    <div className="appearance-bottom"><span className={storageFailed ? 'error-text' : ''}><Check size={13}/>{storageFailed ? t("Браузер не разрешил сохранение настроек.") : t("Сохраняется в этом браузере")}</span><button type="button" className="button small" disabled={uploading} onClick={()=>{reset();setUploadError('');}}><RotateCcw size={14}/>{t("Сбросить оформление")}</button></div>
   </div>;
 }

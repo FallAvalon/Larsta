@@ -32,6 +32,7 @@ For a phone on the same trusted Wi-Fi network, open the LAN address printed by t
 - Streamed replies, editable messages, response variants, regeneration guidance, continuation, branching, and undo with a preserved branch.
 - Independent providers and models for each chat, bounded context, optional reasoning display, paginated history, and restored reading position.
 - Mobile navigation, borderless menus, adjustable typography and colors, interaction animations, and reduced-motion support.
+- Custom chat wallpapers uploaded from your phone or computer (up to 20 MB), with dimming, blur, image fit, and vertical positioning. The character avatar is the default background; restore it with one click. Wallpapers are saved only in the current browser.
 - Spacious message editing and a keyboard-aware regeneration panel with draft recovery and one-use guidance.
 - Live two-line reasoning preview, Markdown-formatted thoughts on an expanded gray surface, and a floating collapse control for the latest open reasoning block.
 - Compact chat headers and a mobile chat-list header that hides on downward reading and returns on upward scrolling. Search, active filters, and input focus keep the panel visible.

@@ -139,7 +139,7 @@ try{
   await page.getByRole('button',{name:'К последним сообщениям',exact:true}).click();
 
   await page.goto(base+'/#chat/'+chat.id);await page.getByRole('textbox',{name:'Ваше сообщение',exact:true}).waitFor();
-  assert.equal(await page.locator('.bottom-nav').count(),0);assert.equal(await page.locator('.chat-wallpaper').count(),0);
+  assert.equal(await page.locator('.bottom-nav').count(),0);assert.equal(await page.locator('.chat-wallpaper').count(),1);
   await page.screenshot({path:'test-results/redesign-mobile-chat.png'});
   const draft=page.getByRole('textbox',{name:'Ваше сообщение',exact:true});
   // Simulate a successful server commit whose acknowledgement never reached the phone.

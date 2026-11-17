@@ -153,3 +153,6 @@ body:has(.modal-backdrop) .toast{z-index:45;pointer-events:none}
 @media(max-width:760px), (max-width:1000px) and (pointer:coarse){.chat-model-button{min-height:24px;font-size:10px}.chat-menu-items{max-height:calc(var(--visible-height,100dvh) - 80px);overflow:auto}.wish-chips .button{min-height:44px}.variant-preview{padding:12px}.variant-preview-text{max-height:240px}.variant-preview-footer{flex-wrap:wrap}.variant-preview-footer small{flex:1 1 100%}.variant-preview-footer .button{width:100%}.generation-settings input,.generation-settings select{font-size:16px;min-height:44px}.branch-list>button{min-height:60px}}
 @media(max-width:760px), (max-width:1000px) and (pointer:coarse){.app.in-chat>.presence>.toast,.app.in-chat>.toast{top:calc(64px + env(safe-area-inset-top));bottom:auto;max-width:calc(100vw - 24px)}}
 .generation-settings>.check-label{min-height:44px}.generation-settings input[type=checkbox]{width:20px;height:20px;min-height:20px;margin:0}.branch-list time{display:block;font-size:10px;color:#8097b9;margin-top:5px}.variant-preview-text:focus-visible{outline:2px solid #75a4ff;outline-offset:3px;border-radius:3px}
+
+.wallpaper-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.wallpaper-actions .button{max-width:100%;white-space:normal;min-height:40px}

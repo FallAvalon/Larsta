@@ -69,7 +69,7 @@ export default function ThinkingBlock({ reasoning, active, latest, scroll, follo
       <div className="thinking-tail" ref={tail}>{reasoning.slice(-2000)}</div>
     </div></div>
     <div id={regionId} className={`thinking-reveal${open ? ' open' : ''}`} inert={!open} aria-hidden={!open}>
-      <div><div ref={content} className="thinking-content">{open && <MessageMarkdown content={reasoning} streaming={active}/>}</div></div>
+      <div><div ref={content} className="thinking-content">{open && <MessageMarkdown content={reasoning} streaming={active} timeline/>}</div></div>
     </div>
     {sticky && open && latest && createPortal(<button type="button" className="thinking-collapse" style={sticky} aria-controls={regionId} aria-expanded="true" onClick={toggle}><ChevronUp size={15} aria-hidden="true"/>{t('Свернуть размышления')}</button>, document.body)}
   </div>;

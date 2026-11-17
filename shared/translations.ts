@@ -1,6 +1,22 @@
 import { providerEnglish } from './provider-translations.js';
 export type Language='ru'|'en';
 const entries=`
+Обои чата|Chat wallpaper
+Показывать обои|Show wallpaper
+Выбраны свои обои. Они сохраняются только в этом браузере.|Custom wallpaper selected. It is saved only in this browser.
+По умолчанию на фоне — аватарка персонажа. Без аватарки остаётся тёмный фон.|The character avatar is the default wallpaper. Without an avatar, the background stays dark.
+Выбрать обои|Choose wallpaper
+Загрузить свои обои|Upload custom wallpaper
+Обработка…|Processing…
+Вернуть аватарку|Restore character avatar
+Выберите изображение с телефона или компьютера, до 20 МБ.|Choose an image from your phone or computer, up to 20 MB.
+Выберите файл изображения.|Choose an image file.
+Изображение должно быть не больше 20 МБ.|The image must be no larger than 20 MB.
+Не удалось открыть изображение. Попробуйте JPEG, PNG или WebP.|Could not open this image. Try JPEG, PNG or WebP.
+Не удалось обработать изображение.|Could not process this image.
+Изображение слишком сложное. Выберите файл меньшего размера.|The image is too complex. Choose a smaller file.
+Не удалось сохранить обои. Освободите место в браузере и попробуйте снова.|Could not save wallpaper. Free up browser storage and try again.
+
 Чаты|Chats
 Персонажи|Characters
 Персоны|Personas
