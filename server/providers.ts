@@ -7,7 +7,7 @@ import { Secrets } from './secrets.js';
 import { OpenAIClient, type Fetcher } from './provider-client.js';
 
 const providerSchema=z.object({
-  kind:z.enum(['openrouter','lmstudio','ollama','omniroute','polza','custom']),name:z.string().trim().min(1).max(80),baseUrl:z.string().trim().min(1).max(2000),
+  kind:z.enum(['openrouter','lmstudio','ollama','omniroute','polza','demonroute','custom']),name:z.string().trim().min(1).max(80),baseUrl:z.string().trim().min(1).max(2000),
   auth:z.enum(['bearer','none']),lastModel:z.string().trim().max(500).default(''),
   compatibility:z.object({tokenLimit:z.enum(['max_tokens','max_completion_tokens','none']),temperature:z.boolean(),reasoning:z.enum(['none','reasoning','reasoning_effort'])}),
   revision:z.number().int().positive().optional(),id:z.string().max(100).optional(),apiKey:z.string().trim().max(4096).optional(),clearApiKey:z.boolean().optional()

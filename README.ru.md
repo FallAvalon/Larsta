@@ -2,7 +2,7 @@
 
 [English version](README.md)
 
-Приложение для чатов с персонажами на своём сервере: React, TypeScript, Vite, Node.js и SQLite. Поддерживает OpenRouter, LM Studio, Ollama, OmniRoute, Polza.ai и произвольные OpenAI-совместимые API. Компьютер и телефон используют общую библиотеку и переписку.
+Приложение для чатов с персонажами на своём сервере: React, TypeScript, Vite, Node.js и SQLite. Поддерживает OpenRouter, LM Studio, Ollama, OmniRoute, Polza.ai, Demon Route и произвольные OpenAI-совместимые API. Компьютер и телефон используют общую библиотеку и переписку.
 
 Публичная версия запускается с пустой библиотекой. Необязательный пример `examples/character-v2.json` — специально придуманный библиотечный проводник для демонстрации и тестов. Личных персонажей, переписок, изображений, ключей и сохранённых настроек в исходниках нет.
 
@@ -51,6 +51,7 @@ npm start
 | [Ollama](https://docs.ollama.com/api/openai-compatibility) | `http://localhost:11434/v1` | Без ключа |
 | [OmniRoute](https://github.com/cheaper-inference/OmniRoute) | `http://localhost:20128/v1` | Без ключа; настройте ключ, если он требуется вашему развёртыванию |
 | [Polza.ai](https://polza.ai/docs/api-reference/introduction) | `https://polza.ai/api/v1` | Bearer-ключ |
+| [Demon Route](https://demonroute.com/models) | `https://api.demonroute.com/v1` | Bearer-ключ |
 | OpenAI-совместимый API | Ваш адрес API | Настраивается |
 
 Запросы отправляет сервер Larsta. **localhost означает компьютер с запущенной Larsta**, в том числе при использовании телефона. Для сервера моделей на другом компьютере укажите его сетевой адрес и разрешите доступ в настройках этого сервера. Локальный сервер должен быть запущен, а модель — доступна в нём. Larsta не устанавливает и не загружает модели.
